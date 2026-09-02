@@ -9,6 +9,11 @@ ARG PRUSA_SLICER_COMMIT=f1776c0a6347bb84986d10eac8db1021f5bd8548
 ARG PRUSA_SLICER_SOURCE_SHA256=fe6c6696360c688f3ac6744964d5c27d98394da3e3cd00a8b8df7bc3fd4f7055
 ARG DEBIAN_SNAPSHOT=20250811T000000Z
 
+# Boost contains Unicode pathnames. Keep CMake/libarchive on Debian's built-in
+# UTF-8 locale so dependency extraction is deterministic on headless builders.
+ENV LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8
+
 RUN printf '%s\n' \
       "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT} bookworm main" \
       "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT} bookworm-security main" \
@@ -71,7 +76,7 @@ LABEL org.opencontainers.image.title="AM Pilot Slicer Core Worker" \
       org.opencontainers.image.description="Headless PrusaSlicer worker for the AM Pilot Slicer protocol" \
       org.opencontainers.image.licenses="AGPL-3.0-only" \
       org.opencontainers.image.source="https://github.com/info380/AM-Pilot-Slicer-Core" \
-      org.opencontainers.image.version="0.1.0" \
+      org.opencontainers.image.version="0.1.1" \
       org.opencontainers.image.prusaslicer.version="2.9.3" \
       org.opencontainers.image.prusaslicer.revision="f1776c0a6347bb84986d10eac8db1021f5bd8548"
 
