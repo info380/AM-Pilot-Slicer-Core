@@ -1,0 +1,146 @@
+name: Release OCI image
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  id-token: write
+  packages: write
+  security-events: write
+  attestations: write
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      image: ${{ steps.image.outputs.name }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22.20.0
+          cache: npm
+      - name: Verify source and release contracts
+        run: |
+          npm ci --ignore-scripts
+          npm run check
+      - name: Resolve lowercase image name
+        id: image
+        shell: bash
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+      - name: Authenticate to GHCR
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Configure Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+      - name: Build release metadata
+        id: metadata
+        uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f # v5.8.0
+        with:
+          images: ${{ steps.image.outputs.name }}
+          tags: |
+            type=ref,event=tag
+            type=sha,prefix=sha-
+      - name: Build and publish immutable image
+        id: build
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
+          provenance: mode=max
+          sbom: true
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
+      - name: Sign immutable image digest
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "${IMAGE}@${DIGEST}"
+      - name: Verify published PrusaSlicer runtime
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: docker run --rm "${IMAGE}@${DIGEST}" /opt/prusa/bin/prusa-slicer --version | grep -F '2.9.3'
+      - name: Scan immutable image digest
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.image.outputs.name }}@${{ steps.build.outputs.digest }}
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'
+      - name: Upload vulnerability evidence
+        if: always()
+        uses: github/codeql-action/upload-sarif@a65a038433a26f4363cf9f029e3b9ceac831ad5d # v3.28.10
+        with:
+          sarif_file: trivy-results.sarif
+      - name: Attest image provenance
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-name: ${{ steps.image.outputs.name }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+      - name: Build corresponding-source archive
+        env:
+          RELEASE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: scripts/build-source-bundle.sh
+      - name: Materialize immutable release evidence
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          container_id="$(docker create "${IMAGE}@${DIGEST}")"
+          trap 'docker rm -f "${container_id}" >/dev/null 2>&1 || true' EXIT
+          docker cp "${container_id}:/opt/prusa/bin/prusa-slicer" /tmp/prusa-slicer
+          test "$(docker inspect --format '{{.Config.User}}' "${IMAGE}@${DIGEST}")" = 'node'
+          sha256sum /tmp/prusa-slicer > release-evidence/prusa-slicer-binary.SHA256
+          docker buildx imagetools inspect \
+            --format '{{ json .SBOM }}' \
+            "${IMAGE}@${DIGEST}" > release-evidence/sbom.spdx.json
+          docker buildx imagetools inspect \
+            --format '{{ json .Provenance.SLSA }}' \
+            "${IMAGE}@${DIGEST}" > release-evidence/provenance.slsa.json
+          jq -e 'type == "object" and length > 0' release-evidence/sbom.spdx.json >/dev/null
+          jq -e 'type == "object" and length > 0' release-evidence/provenance.slsa.json >/dev/null
+          cosign verify \
+            --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@${GITHUB_REF}" \
+            --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+            "${IMAGE}@${DIGEST}" > release-evidence/signature-verification.json
+          cp NOTICE THIRD_PARTY_NOTICES.md SOURCE_OFFER.md trivy-results.sarif release-evidence/
+          sha256sum \
+            release-evidence/NOTICE \
+            release-evidence/THIRD_PARTY_NOTICES.md \
+            release-evidence/SOURCE_OFFER.md \
+            release-evidence/prusa-slicer-binary.SHA256 \
+            release-evidence/provenance.slsa.json \
+            release-evidence/release-evidence.json \
+            release-evidence/sbom.spdx.json \
+            release-evidence/signature-verification.json \
+            release-evidence/trivy-results.sarif \
+            > release-evidence/EVIDENCE_SHA256SUMS
+      - name: Upload corresponding source and release evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: am-pilot-slicer-core-source-${{ github.sha }}
+          path: release-evidence/
+          if-no-files-found: error
+          retention-days: 90
+      - name: Publish permanent corresponding source and release evidence
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 \
+            || gh release create "${GITHUB_REF_NAME}" --verify-tag --generate-notes
+          gh release upload "${GITHUB_REF_NAME}" release-evidence/* --clobber

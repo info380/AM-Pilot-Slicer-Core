@@ -1,0 +1,13 @@
+AM Pilot Slicer Core
+Copyright (C) 2026 AM Pilot contributors
+
+This product includes PrusaSlicer 2.9.3, built from upstream commit
+f1776c0a6347bb84986d10eac8db1021f5bd8548.
+
+PrusaSlicer is Copyright (C) Prusa Research and contributors and is based on
+Slic3r by Alessandro Ranellucci and the RepRap community. PrusaSlicer is
+licensed under the GNU Affero General Public License, version 3.
+
+This product also includes fflate 0.8.2, Copyright (c) 2023 Arjun Barrett,
+licensed under the MIT License. See node_modules/fflate/LICENSE at build time
+and the package source linked from THIRD_PARTY_NOTICES.md.

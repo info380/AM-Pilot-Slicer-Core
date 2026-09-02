@@ -1,0 +1,27 @@
+{
+  "schema": "am-pilot-slicer-core-capabilities",
+  "version": 1,
+  "capabilityRevisionId": "fdm-prusa-2.9.3-protocol1-r1",
+  "engineKey": "fdm.am_pilot_prusa_core",
+  "workerProtocolVersion": 1,
+  "engine": {
+    "name": "PrusaSlicer",
+    "version": "2.9.3",
+    "upstreamCommit": "f1776c0a6347bb84986d10eac8db1021f5bd8548"
+  },
+  "processFamilies": ["fdm"],
+  "inputFormats": ["stl", "3mf"],
+  "outputFormats": ["gcode", "result-manifest"],
+  "plate": {
+    "preservesPlacement": true,
+    "autoArrange": false,
+    "transforms": ["position_xyz", "rotation_xyz", "scale_xyz"],
+    "projectOrigins": ["center"],
+    "engineBedOrigins": ["front_left", "center"]
+  },
+  "execution": {
+    "concurrency": 1,
+    "postProcessingScripts": false,
+    "toolpathPreviewArtifact": false
+  }
+}
