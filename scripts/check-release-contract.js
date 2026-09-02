@@ -20,6 +20,11 @@ assert.match(dockerfile, new RegExp(`grep -F '${PRUSA_SLICER_VERSION.replaceAll(
 assert.match(dockerfile, /USER node/);
 assert.match(dockerfile, /SLIC3R_GUI=OFF/);
 assert.match(dockerfile, /SLIC3R_ENABLE_FORMAT_STEP=OFF/);
+assert.match(dockerfile, /find \/src\/deps\/build-no-occt\/destdir\/usr\/local\/lib/);
+assert.match(dockerfile, /LD_LIBRARY_PATH=\/opt\/prusa\/lib ldd/);
+assert.match(dockerfile, /grep -F 'not found'/);
+assert.match(dockerfile, /LD_LIBRARY_PATH=\/opt\/prusa\/lib \\/);
+assert.match(dockerfile, /RUN ldd \/opt\/prusa\/bin\/prusa-slicer/);
 assert.match(dockerfile, /https:\/\/ftp\.gnu\.org\/gnu\/gmp/);
 assert.match(dockerfile, new RegExp(GMP_SOURCE_SHA256));
 assert.match(sourceBundle, new RegExp(`gmp_version='${GMP_VERSION.replaceAll('.', '\\.')}'`));

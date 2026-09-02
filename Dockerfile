@@ -80,7 +80,15 @@ RUN cmake -S . -B build -G Ninja \
     && cmake --build build --parallel 2 \
     && cmake --install build \
     && strip /opt/prusa/bin/prusa-slicer \
-    && /opt/prusa/bin/prusa-slicer --version | grep -F '2.9.3'
+    && mkdir -p /opt/prusa/lib \
+    && find /src/deps/build-no-occt/destdir/usr/local/lib \
+      \( -type f -o -type l \) -name '*.so*' \
+      -exec cp -a -t /opt/prusa/lib {} + \
+    && LD_LIBRARY_PATH=/opt/prusa/lib ldd /opt/prusa/bin/prusa-slicer \
+      | tee /tmp/prusa-slicer-ldd.txt \
+    && ! grep -F 'not found' /tmp/prusa-slicer-ldd.txt \
+    && LD_LIBRARY_PATH=/opt/prusa/lib /opt/prusa/bin/prusa-slicer --version \
+      | grep -F '2.9.3'
 
 FROM ${NODE_RUNTIME_IMAGE} AS worker-dependencies
 WORKDIR /worker
@@ -94,11 +102,12 @@ LABEL org.opencontainers.image.title="AM Pilot Slicer Core Worker" \
       org.opencontainers.image.description="Headless PrusaSlicer worker for the AM Pilot Slicer protocol" \
       org.opencontainers.image.licenses="AGPL-3.0-only" \
       org.opencontainers.image.source="https://github.com/info380/AM-Pilot-Slicer-Core" \
-      org.opencontainers.image.version="0.1.5" \
+      org.opencontainers.image.version="0.1.6" \
       org.opencontainers.image.prusaslicer.version="2.9.3" \
       org.opencontainers.image.prusaslicer.revision="f1776c0a6347bb84986d10eac8db1021f5bd8548"
 
 ENV NODE_ENV=production \
+    LD_LIBRARY_PATH=/opt/prusa/lib \
     PRUSA_SLICER_CMD=/opt/prusa/bin/prusa-slicer \
     SLICER_WORK_ROOT=/tmp/am-pilot-slicer-worker
 
@@ -108,7 +117,9 @@ COPY --from=worker-dependencies /worker/node_modules ./node_modules
 COPY package.json ./
 COPY src ./src
 
-RUN /opt/prusa/bin/prusa-slicer --version | grep -F '2.9.3' \
+RUN ldd /opt/prusa/bin/prusa-slicer | tee /tmp/prusa-slicer-ldd.txt \
+    && ! grep -F 'not found' /tmp/prusa-slicer-ldd.txt \
+    && /opt/prusa/bin/prusa-slicer --version | grep -F '2.9.3' \
     && mkdir -p /tmp/am-pilot-slicer-worker \
     && chown -R node:node /tmp/am-pilot-slicer-worker /worker
 
