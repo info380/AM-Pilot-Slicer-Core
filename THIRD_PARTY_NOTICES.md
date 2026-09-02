@@ -12,6 +12,17 @@ PrusaSlicer is based on Slic3r by Alessandro Ranellucci and the RepRap
 community. Its dependency build definitions contain the exact upstream URLs,
 versions, patches, and checksums used by the pinned build.
 
+## GNU MP 6.2.1
+
+- Project: <https://gmplib.org/>
+- Authoritative source: <https://ftp.gnu.org/gnu/gmp/gmp-6.2.1.tar.bz2>
+- License: GNU LGPL version 3 or later, or GNU GPL version 2 or later
+- Exact source archive SHA-256:
+  `eae9326beb4158c386e39a356818031bd28f3124cf915f8c5b1dc4c7a36b4d7c`
+
+The release publishes the exact checksum-locked source archive linked into
+the PrusaSlicer binary.
+
 ## fflate 0.8.2
 
 - Project: <https://github.com/101arrowz/fflate>

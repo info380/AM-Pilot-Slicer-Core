@@ -9,6 +9,8 @@ export const EFFECTIVE_CONFIG_VERSION = 6;
 export const PRUSA_SLICER_VERSION = '2.9.3';
 export const PRUSA_SLICER_UPSTREAM_COMMIT = 'f1776c0a6347bb84986d10eac8db1021f5bd8548';
 export const PRUSA_SLICER_SOURCE_SHA256 = 'fe6c6696360c688f3ac6744964d5c27d98394da3e3cd00a8b8df7bc3fd4f7055';
+export const GMP_VERSION = '6.2.1';
+export const GMP_SOURCE_SHA256 = 'eae9326beb4158c386e39a356818031bd28f3124cf915f8c5b1dc4c7a36b4d7c';
 
 export const GCODE_CONTENT_TYPE = 'text/x.gcode';
 export const MANIFEST_CONTENT_TYPE = 'application/vnd.am-pilot.slicer-result+json';

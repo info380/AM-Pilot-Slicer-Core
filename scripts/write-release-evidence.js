@@ -2,6 +2,8 @@ import fs from 'node:fs';
 
 import {
   ENGINE_KEY,
+  GMP_SOURCE_SHA256,
+  GMP_VERSION,
   PRUSA_SLICER_SOURCE_SHA256,
   PRUSA_SLICER_UPSTREAM_COMMIT,
   PRUSA_SLICER_VERSION,
@@ -35,7 +37,9 @@ const evidence = {
     revision: process.env.GITHUB_SHA || null,
     prusaSlicerVersion: PRUSA_SLICER_VERSION,
     prusaSlicerUpstreamCommit: PRUSA_SLICER_UPSTREAM_COMMIT,
-    prusaSlicerSourceArchiveChecksumSha256: PRUSA_SLICER_SOURCE_SHA256
+    prusaSlicerSourceArchiveChecksumSha256: PRUSA_SLICER_SOURCE_SHA256,
+    gmpVersion: GMP_VERSION,
+    gmpSourceArchiveChecksumSha256: GMP_SOURCE_SHA256
   },
   build: {
     workflowRun: process.env.GITHUB_SERVER_URL && process.env.GITHUB_REPOSITORY && process.env.GITHUB_RUN_ID
@@ -48,6 +52,10 @@ const evidence = {
   },
   artifacts: {
     checksums: releaseAssetUrl('EVIDENCE_SHA256SUMS'),
+    sourceChecksums: releaseAssetUrl('SHA256SUMS'),
+    amPilotSource: releaseAssetUrl(`AM-Pilot-Slicer-Core-${process.env.GITHUB_SHA}.tar.gz`),
+    prusaSlicerSource: releaseAssetUrl(`PrusaSlicer-${PRUSA_SLICER_UPSTREAM_COMMIT}.tar.gz`),
+    gmpSource: releaseAssetUrl(`gmp-${GMP_VERSION}.tar.bz2`),
     binaryChecksum: releaseAssetUrl('prusa-slicer-binary.SHA256'),
     sbom: releaseAssetUrl('sbom.spdx.json'),
     provenance: releaseAssetUrl('provenance.slsa.json'),

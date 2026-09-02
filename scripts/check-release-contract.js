@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 import {
+  GMP_SOURCE_SHA256,
+  GMP_VERSION,
   PRUSA_SLICER_SOURCE_SHA256,
   PRUSA_SLICER_UPSTREAM_COMMIT,
   PRUSA_SLICER_VERSION
@@ -9,6 +11,7 @@ import {
 
 const dockerfile = fs.readFileSync(new URL('../Dockerfile', import.meta.url), 'utf8');
 const release = fs.readFileSync(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8');
+const sourceBundle = fs.readFileSync(new URL('./build-source-bundle.sh', import.meta.url), 'utf8');
 const license = fs.readFileSync(new URL('../LICENSE', import.meta.url), 'utf8');
 
 assert.match(dockerfile, new RegExp(PRUSA_SLICER_UPSTREAM_COMMIT));
@@ -17,6 +20,11 @@ assert.match(dockerfile, new RegExp(`grep -F '${PRUSA_SLICER_VERSION.replaceAll(
 assert.match(dockerfile, /USER node/);
 assert.match(dockerfile, /SLIC3R_GUI=OFF/);
 assert.match(dockerfile, /SLIC3R_ENABLE_FORMAT_STEP=OFF/);
+assert.match(dockerfile, /https:\/\/ftp\.gnu\.org\/gnu\/gmp/);
+assert.match(dockerfile, new RegExp(GMP_SOURCE_SHA256));
+assert.match(sourceBundle, new RegExp(`gmp_version='${GMP_VERSION.replaceAll('.', '\\.')}'`));
+assert.match(sourceBundle, new RegExp(GMP_SOURCE_SHA256));
+assert.match(sourceBundle, /\.\/\*\.tar\.bz2/);
 assert.match(release, /provenance: mode=max/);
 assert.match(release, /sbom: true/);
 assert.match(release, /cosign sign --yes/);

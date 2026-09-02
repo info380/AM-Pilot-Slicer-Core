@@ -7,6 +7,8 @@ FROM ${DEBIAN_BUILD_IMAGE} AS prusa-build
 
 ARG PRUSA_SLICER_COMMIT=f1776c0a6347bb84986d10eac8db1021f5bd8548
 ARG PRUSA_SLICER_SOURCE_SHA256=fe6c6696360c688f3ac6744964d5c27d98394da3e3cd00a8b8df7bc3fd4f7055
+ARG GMP_VERSION=6.2.1
+ARG GMP_SOURCE_SHA256=eae9326beb4158c386e39a356818031bd28f3124cf915f8c5b1dc4c7a36b4d7c
 ARG DEBIAN_SNAPSHOT=20250811T000000Z
 
 # Boost contains Unicode pathnames. Keep CMake/libarchive on Debian's built-in
@@ -48,6 +50,17 @@ RUN curl --fail --location --proto '=https' --tlsv1.2 \
     && tar --extract --gzip --file /tmp/prusaslicer.tar.gz --strip-components=1 \
     && rm /tmp/prusaslicer.tar.gz
 
+# PrusaSlicer 2.9.3 points GMP at gmplib.org, which repeatedly times out from
+# GitHub-hosted runners. Preseed the same checksum-locked archive from GNU's
+# authoritative distribution host; ExternalProject verifies it again.
+RUN mkdir -p deps/.pkg_cache/GMP \
+    && curl --fail --location --retry 5 --retry-all-errors --retry-delay 2 \
+      --proto '=https' --tlsv1.2 \
+      "https://ftp.gnu.org/gnu/gmp/gmp-${GMP_VERSION}.tar.bz2" \
+      --output "deps/.pkg_cache/GMP/gmp-${GMP_VERSION}.tar.bz2" \
+    && echo "${GMP_SOURCE_SHA256}  deps/.pkg_cache/GMP/gmp-${GMP_VERSION}.tar.bz2" \
+      | sha256sum --check --strict
+
 # Prusa's supported Linux build path compiles the pinned dependency bundle first.
 # The no-OCCT preset intentionally excludes STEP import; AM Pilot protocol v1 accepts STL and 3MF.
 RUN cmake --preset no-occt -S deps \
@@ -81,7 +94,7 @@ LABEL org.opencontainers.image.title="AM Pilot Slicer Core Worker" \
       org.opencontainers.image.description="Headless PrusaSlicer worker for the AM Pilot Slicer protocol" \
       org.opencontainers.image.licenses="AGPL-3.0-only" \
       org.opencontainers.image.source="https://github.com/info380/AM-Pilot-Slicer-Core" \
-      org.opencontainers.image.version="0.1.4" \
+      org.opencontainers.image.version="0.1.5" \
       org.opencontainers.image.prusaslicer.version="2.9.3" \
       org.opencontainers.image.prusaslicer.revision="f1776c0a6347bb84986d10eac8db1021f5bd8548"
 
