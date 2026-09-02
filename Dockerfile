@@ -27,11 +27,14 @@ RUN printf '%s\n' \
       ca-certificates \
       cmake \
       curl \
+      gettext \
       git \
       libdbus-1-dev \
       libglu1-mesa-dev \
       libgtk-3-dev \
+      libtool \
       libwebkit2gtk-4.1-dev \
+      m4 \
       ninja-build \
       pkg-config \
       texinfo \
@@ -77,7 +80,7 @@ LABEL org.opencontainers.image.title="AM Pilot Slicer Core Worker" \
       org.opencontainers.image.description="Headless PrusaSlicer worker for the AM Pilot Slicer protocol" \
       org.opencontainers.image.licenses="AGPL-3.0-only" \
       org.opencontainers.image.source="https://github.com/info380/AM-Pilot-Slicer-Core" \
-      org.opencontainers.image.version="0.1.2" \
+      org.opencontainers.image.version="0.1.3" \
       org.opencontainers.image.prusaslicer.version="2.9.3" \
       org.opencontainers.image.prusaslicer.revision="f1776c0a6347bb84986d10eac8db1021f5bd8548"
 
