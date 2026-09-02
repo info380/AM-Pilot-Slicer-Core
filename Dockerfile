@@ -59,6 +59,7 @@ RUN cmake -S . -B build -G Ninja \
       -DCMAKE_PREFIX_PATH=/src/deps/build-no-occt/destdir/usr/local \
       -DSLIC3R_BUILD_TESTS=OFF \
       -DSLIC3R_DESKTOP_INTEGRATION=OFF \
+      -DSLIC3R_ENABLE_FORMAT_STEP=OFF \
       -DSLIC3R_FHS=ON \
       -DSLIC3R_GUI=OFF \
       -DSLIC3R_PCH=OFF \
@@ -80,7 +81,7 @@ LABEL org.opencontainers.image.title="AM Pilot Slicer Core Worker" \
       org.opencontainers.image.description="Headless PrusaSlicer worker for the AM Pilot Slicer protocol" \
       org.opencontainers.image.licenses="AGPL-3.0-only" \
       org.opencontainers.image.source="https://github.com/info380/AM-Pilot-Slicer-Core" \
-      org.opencontainers.image.version="0.1.3" \
+      org.opencontainers.image.version="0.1.4" \
       org.opencontainers.image.prusaslicer.version="2.9.3" \
       org.opencontainers.image.prusaslicer.revision="f1776c0a6347bb84986d10eac8db1021f5bd8548"
 

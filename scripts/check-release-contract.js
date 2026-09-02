@@ -16,6 +16,7 @@ assert.match(dockerfile, new RegExp(PRUSA_SLICER_SOURCE_SHA256));
 assert.match(dockerfile, new RegExp(`grep -F '${PRUSA_SLICER_VERSION.replaceAll('.', '\\.')}'`));
 assert.match(dockerfile, /USER node/);
 assert.match(dockerfile, /SLIC3R_GUI=OFF/);
+assert.match(dockerfile, /SLIC3R_ENABLE_FORMAT_STEP=OFF/);
 assert.match(release, /provenance: mode=max/);
 assert.match(release, /sbom: true/);
 assert.match(release, /cosign sign --yes/);
