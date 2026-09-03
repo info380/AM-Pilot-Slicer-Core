@@ -14,7 +14,7 @@
     "check": "npm run test && node scripts/check-release-contract.js"
   },
   "dependencies": {
-    "fflate": "0.8.2",
+    "fflate": "0.8.3",
     "undici": "8.10.1"
   }
 }
