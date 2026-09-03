@@ -13,6 +13,7 @@ const dockerfile = fs.readFileSync(new URL('../Dockerfile', import.meta.url), 'u
 const release = fs.readFileSync(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8');
 const qualification = fs.readFileSync(new URL('../.github/workflows/qualification.yml', import.meta.url), 'utf8');
 const qualificationCorpus = fs.readFileSync(new URL('../qualification/run-corpus.mjs', import.meta.url), 'utf8');
+const egressProxy = fs.readFileSync(new URL('../src/egress-proxy.js', import.meta.url), 'utf8');
 const sourceBundle = fs.readFileSync(new URL('./build-source-bundle.sh', import.meta.url), 'utf8');
 const license = fs.readFileSync(new URL('../LICENSE', import.meta.url), 'utf8');
 const packageManifest = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
@@ -75,6 +76,9 @@ assert.match(qualificationCorpus, /file:\/\/\/worker\/src\/engine\.js/);
 assert.match(qualificationCorpus, /AM_PILOT_QUALIFICATION_START/);
 assert.match(qualificationCorpus, /AM_PILOT_QUALIFICATION_END/);
 assert.match(qualificationCorpus, /deterministicRepeat: true/);
+assert.match(egressProxy, /slicer_egress_proxy_rejected/);
+assert.match(egressProxy, /authority\.host !== config\.allowedHost/);
+assert.match(egressProxy, /authority\.port !== config\.allowedPort/);
 assert.equal(packageManifest.dependencies.undici, '8.10.1');
 assert.match(license, /GNU AFFERO GENERAL PUBLIC LICENSE/);
 assert.match(license, /Version 3, 19 November 2007/);

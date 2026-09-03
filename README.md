@@ -70,6 +70,24 @@ network and expose only a separately administered CONNECT proxy that permits
 rejects any request whose origin differs from `AM_PILOT_API_BASE_URL`; the
 network boundary remains authoritative if the worker process is compromised.
 
+The same immutable image can run that dedicated proxy with
+`node src/egress-proxy.js`. It requires all six settings below and has no
+defaults or alternate destination:
+
+| Variable | Meaning |
+| --- | --- |
+| `SLICER_EGRESS_PROXY_ALLOWED_HOST` | Exact API DNS hostname or IP address |
+| `SLICER_EGRESS_PROXY_ALLOWED_PORT` | Exact API TCP port |
+| `SLICER_EGRESS_PROXY_LISTEN_HOST` | Internal-network listen address |
+| `SLICER_EGRESS_PROXY_LISTEN_PORT` | Unprivileged internal proxy port |
+| `SLICER_EGRESS_PROXY_IDLE_TIMEOUT_MS` | Bounded tunnel idle timeout |
+| `SLICER_EGRESS_PROXY_MAX_CONNECTIONS` | Bounded simultaneous connection count |
+
+The proxy rejects ordinary HTTP forwarding and every CONNECT authority except
+the exact configured host and port. Run it as a separate container joined to
+both the worker's internal-only network and a controlled egress network; the
+worker container must join only the internal network.
+
 ## Explicit runtime defaults
 
 These defaults target the initial low-volume, approximately EUR 7/month
