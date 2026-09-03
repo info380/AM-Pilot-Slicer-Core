@@ -15,6 +15,15 @@ The synthetic G-code and JSON report are written with read-only-for-others file
 permissions so the separate GitHub runner identity can validate and package the
 bind-mounted evidence. They contain no customer or production input.
 
+`run-failure-corpus.mjs` executes in a separate container at the same candidate
+digest and with the same hardened resource and network boundaries. It exercises
+the published worker's failure contracts for malformed STL and 3MF input,
+download checksum mismatch and cleanup, cancellation, lease loss, timeout,
+transient-download retry with partial-file cleanup, and G-code and manifest
+output limits. The workflow fails unless all nine cases produce their exact
+expected result, and packages the JSON report and container inspection as
+candidate evidence.
+
 PrusaSlicer places the wall-clock time in the first generated G-code comment.
 The worker replaces only that exact timestamp with the conventional reproducible
 build epoch `1970-01-01 at 00:00:00 UTC` before hashing or publishing output.
@@ -22,6 +31,7 @@ Operational run timestamps remain in AM Pilot's run and manifest evidence; an
 unexpected generator header fails closed.
 
 The workflow artifact is candidate evidence, not engine approval. AM Pilot still
-requires durable regression evidence, destination-restricted worker egress, named
-legal and security approvals, and a supervised physical-print qualification before
-the private engine-promotion command can succeed.
+requires representative production-worker resource and admission evidence,
+destination-restricted worker egress, named legal and security approvals, and a
+supervised physical-print qualification before the private engine-promotion
+command can succeed.

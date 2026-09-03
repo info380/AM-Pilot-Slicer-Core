@@ -234,6 +234,62 @@ jobs:
             .resources.cgroupMemoryPeakBytes <= 536870912
           ' --arg digest "${IMAGE_DIGEST}" "${output_dir}/corpus-report.json" >/dev/null
           sha256sum "${output_dir}"/* > "${output_dir}/SHA256SUMS"
+      - name: Run digest-pinned synthetic failure corpus
+        id: failure-corpus
+        shell: bash
+        env:
+          IMAGE: ${{ steps.candidate.outputs.image }}
+          IMAGE_DIGEST: ${{ inputs.image_digest }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          readonly output_dir="${RUNNER_TEMP}/failure-qualification-output"
+          mkdir -p "${output_dir}"
+          chmod 0777 "${output_dir}"
+          readonly container_id="$(docker create \
+            --platform linux/amd64 \
+            --network none \
+            --read-only \
+            --memory 512m \
+            --memory-swap 512m \
+            --cpus 0.5 \
+            --pids-limit 256 \
+            --security-opt no-new-privileges \
+            --cap-drop ALL \
+            --tmpfs /tmp:rw,nosuid,nodev,size=384m,mode=1777 \
+            --mount type=bind,source="${GITHUB_WORKSPACE}/qualification",target=/qualification,readonly \
+            --mount type=bind,source="${output_dir}",target=/qualification-output \
+            --env "QUALIFICATION_IMAGE_DIGEST=${IMAGE_DIGEST}" \
+            --env "QUALIFICATION_RELEASE_TAG=${RELEASE_TAG}" \
+            --env QUALIFICATION_OUTPUT_DIR=/qualification-output \
+            --entrypoint node \
+            "${IMAGE}" \
+            /qualification/run-failure-corpus.mjs)"
+          trap 'docker rm -f "${container_id}" >/dev/null 2>&1 || true' EXIT
+          docker inspect "${container_id}" > "${output_dir}/container-inspect.json"
+          jq -e '
+            .[0].Config.User == "node" and
+            .[0].HostConfig.NetworkMode == "none" and
+            .[0].HostConfig.ReadonlyRootfs == true and
+            .[0].HostConfig.Memory == 536870912 and
+            .[0].HostConfig.MemorySwap == 536870912 and
+            .[0].HostConfig.NanoCpus == 500000000 and
+            .[0].HostConfig.PidsLimit == 256 and
+            (.[0].HostConfig.CapDrop | index("ALL") != null) and
+            (.[0].HostConfig.SecurityOpt | index("no-new-privileges") != null)
+          ' "${output_dir}/container-inspect.json" >/dev/null
+          docker start --attach "${container_id}"
+          jq -e '
+            .schema == "am-pilot-slicer-core-failure-corpus-report" and
+            .version == 1 and
+            .status == "passed" and
+            .release.imageDigest == $digest and
+            .corpus.source == "synthetic-non-customer" and
+            .corpus.networkRequired == false and
+            (.cases | length) == 9 and
+            ([.cases[].status] | all(. == "passed"))
+          ' --arg digest "${IMAGE_DIGEST}" "${output_dir}/failure-corpus-report.json" >/dev/null
+          sha256sum "${output_dir}"/* > "${output_dir}/SHA256SUMS"
       - name: Upload qualification evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -241,6 +297,7 @@ jobs:
           name: slicer-core-qualification-${{ inputs.release_tag }}-${{ github.run_id }}
           path: |
             ${{ runner.temp }}/qualification-output/
+            ${{ runner.temp }}/failure-qualification-output/
             ${{ runner.temp }}/release-evidence/
           if-no-files-found: error
           retention-days: 90
