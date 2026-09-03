@@ -56,11 +56,19 @@ temporary directory is deleted after every completion or failure.
 | `SLICER_WORKER_CONTROL_TOKEN` | Dedicated secret, at least 32 bytes |
 | `SLICER_WORKER_ID` | Stable deployment instance identity |
 | `SLICER_IMAGE_DIGEST` | Exact deployed OCI digest (`sha256:...`) |
+| `SLICER_EGRESS_PROXY_URL` | Dedicated HTTP(S) CONNECT proxy origin used for every API request |
+| `SLICER_EGRESS_PROXY_REQUIRED` | Set to `true` on production workers so startup fails unless the proxy is configured |
 
 The image supplies `PRUSA_SLICER_CMD=/opt/prusa/bin/prusa-slicer` and
 `SLICER_WORK_ROOT=/tmp/am-pilot-slicer-worker`. Both may be overridden, but
 startup fails unless the binary and dedicated absolute work directory are
 valid.
+
+For a production deployment, place the worker on an internal-only container
+network and expose only a separately administered CONNECT proxy that permits
+`api.am-pilot.com:443`. Set both egress-proxy variables above. The worker also
+rejects any request whose origin differs from `AM_PILOT_API_BASE_URL`; the
+network boundary remains authoritative if the worker process is compromised.
 
 ## Explicit runtime defaults
 

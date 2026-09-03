@@ -15,11 +15,13 @@ const qualification = fs.readFileSync(new URL('../.github/workflows/qualificatio
 const qualificationCorpus = fs.readFileSync(new URL('../qualification/run-corpus.mjs', import.meta.url), 'utf8');
 const sourceBundle = fs.readFileSync(new URL('./build-source-bundle.sh', import.meta.url), 'utf8');
 const license = fs.readFileSync(new URL('../LICENSE', import.meta.url), 'utf8');
+const packageManifest = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 
 assert.match(dockerfile, new RegExp(PRUSA_SLICER_UPSTREAM_COMMIT));
 assert.match(dockerfile, new RegExp(PRUSA_SLICER_SOURCE_SHA256));
 assert.match(dockerfile, new RegExp(`grep -F '${PRUSA_SLICER_VERSION.replaceAll('.', '\\.')}'`));
 assert.match(dockerfile, /USER node/);
+assert.match(dockerfile, new RegExp(`org\\.opencontainers\\.image\\.version="${packageManifest.version.replaceAll('.', '\\.')}"`));
 assert.match(dockerfile, /SLIC3R_GUI=OFF/);
 assert.match(dockerfile, /SLIC3R_ENABLE_FORMAT_STEP=OFF/);
 assert.match(dockerfile, /find \/src\/deps\/build-no-occt\/destdir\/usr\/local\/lib/);
@@ -69,6 +71,7 @@ assert.match(qualificationCorpus, /file:\/\/\/worker\/src\/engine\.js/);
 assert.match(qualificationCorpus, /AM_PILOT_QUALIFICATION_START/);
 assert.match(qualificationCorpus, /AM_PILOT_QUALIFICATION_END/);
 assert.match(qualificationCorpus, /deterministicRepeat: true/);
+assert.equal(packageManifest.dependencies.undici, '8.10.1');
 assert.match(license, /GNU AFFERO GENERAL PUBLIC LICENSE/);
 assert.match(license, /Version 3, 19 November 2007/);
 process.stdout.write('Release contract verified.\n');

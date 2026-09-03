@@ -29,6 +29,21 @@ test('rejects insecure non-loopback API origins', () => {
   );
 });
 
+test('requires an explicit private proxy origin when proxy enforcement is enabled', () => {
+  assert.throws(() => loadWorkerConfig(environment({
+    SLICER_EGRESS_PROXY_REQUIRED: 'true',
+  }), { allowInsecureLoopback: true }), /SLICER_EGRESS_PROXY_URL is required/);
+  const config = loadWorkerConfig(environment({
+    SLICER_EGRESS_PROXY_REQUIRED: 'true',
+    SLICER_EGRESS_PROXY_URL: 'http://egress-proxy:3128'
+  }), { allowInsecureLoopback: true });
+  assert.equal(config.egressProxyRequired, true);
+  assert.equal(config.egressProxyUrl.toString(), 'http://egress-proxy:3128/');
+  assert.throws(() => loadWorkerConfig(environment({
+    SLICER_EGRESS_PROXY_REQUIRED: 'yes'
+  }), { allowInsecureLoopback: true }), /must be true or false/);
+});
+
 test('serializes the canonical Prusa config deterministically', () => {
   assert.equal(serializePrusaConfig({
     start_gcode: 'G28\r\nM117 Ready',
