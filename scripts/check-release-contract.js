@@ -25,6 +25,8 @@ assert.match(dockerfile, /LD_LIBRARY_PATH=\/opt\/prusa\/lib ldd/);
 assert.match(dockerfile, /grep -F 'not found'/);
 assert.match(dockerfile, /LD_LIBRARY_PATH=\/opt\/prusa\/lib \\/);
 assert.match(dockerfile, /RUN ldd \/opt\/prusa\/bin\/prusa-slicer/);
+assert.match(dockerfile, /ARG DEBIAN_SNAPSHOT=20250811T000000Z/);
+assert.match(dockerfile, /apt-get install -y --no-install-recommends libpng16-16/);
 assert.match(dockerfile, /https:\/\/ftp\.gnu\.org\/gnu\/gmp/);
 assert.match(dockerfile, new RegExp(GMP_SOURCE_SHA256));
 assert.match(sourceBundle, new RegExp(`gmp_version='${GMP_VERSION.replaceAll('.', '\\.')}'`));

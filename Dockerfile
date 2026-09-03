@@ -2,6 +2,7 @@
 
 ARG DEBIAN_BUILD_IMAGE=debian:bookworm-20250811-slim@sha256:b1a741487078b369e78119849663d7f1a5341ef2768798f7b7406c4240f86aef
 ARG NODE_RUNTIME_IMAGE=node:22.20.0-bookworm-slim@sha256:b21fe589dfbe5cc39365d0544b9be3f1f33f55f3c86c87a76ff65a02f8f5848e
+ARG DEBIAN_SNAPSHOT=20250811T000000Z
 
 FROM ${DEBIAN_BUILD_IMAGE} AS prusa-build
 
@@ -9,7 +10,7 @@ ARG PRUSA_SLICER_COMMIT=f1776c0a6347bb84986d10eac8db1021f5bd8548
 ARG PRUSA_SLICER_SOURCE_SHA256=fe6c6696360c688f3ac6744964d5c27d98394da3e3cd00a8b8df7bc3fd4f7055
 ARG GMP_VERSION=6.2.1
 ARG GMP_SOURCE_SHA256=eae9326beb4158c386e39a356818031bd28f3124cf915f8c5b1dc4c7a36b4d7c
-ARG DEBIAN_SNAPSHOT=20250811T000000Z
+ARG DEBIAN_SNAPSHOT
 
 # Boost contains Unicode pathnames. Keep CMake/libarchive on Debian's built-in
 # UTF-8 locale so dependency extraction is deterministic on headless builders.
@@ -98,6 +99,8 @@ RUN npm ci --ignore-scripts --omit=dev \
 
 FROM ${NODE_RUNTIME_IMAGE} AS runtime
 
+ARG DEBIAN_SNAPSHOT
+
 LABEL org.opencontainers.image.title="AM Pilot Slicer Core Worker" \
       org.opencontainers.image.description="Headless PrusaSlicer worker for the AM Pilot Slicer protocol" \
       org.opencontainers.image.licenses="AGPL-3.0-only" \
@@ -110,6 +113,18 @@ ENV NODE_ENV=production \
     LD_LIBRARY_PATH=/opt/prusa/lib \
     PRUSA_SLICER_CMD=/opt/prusa/bin/prusa-slicer \
     SLICER_WORK_ROOT=/tmp/am-pilot-slicer-worker
+
+# The headless Prusa binary still links Debian's libpng dynamically. Install
+# that explicit runtime package from the same immutable Debian snapshot used by
+# the builder, retaining package metadata for the SBOM and vulnerability scan.
+RUN printf '%s\n' \
+      "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT} bookworm main" \
+      "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT} bookworm-security main" \
+      > /etc/apt/sources.list \
+    && rm -f /etc/apt/sources.list.d/debian.sources \
+    && apt-get -o Acquire::Check-Valid-Until=false update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libpng16-16 \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY --from=prusa-build /opt/prusa /opt/prusa
 WORKDIR /worker
