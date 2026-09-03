@@ -13,6 +13,10 @@ const dockerfile = fs.readFileSync(new URL('../Dockerfile', import.meta.url), 'u
 const release = fs.readFileSync(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8');
 const qualification = fs.readFileSync(new URL('../.github/workflows/qualification.yml', import.meta.url), 'utf8');
 const qualificationCorpus = fs.readFileSync(new URL('../qualification/run-corpus.mjs', import.meta.url), 'utf8');
+const qualificationFailureCorpus = fs.readFileSync(
+  new URL('../qualification/run-failure-corpus.mjs', import.meta.url),
+  'utf8'
+);
 const egressProxy = fs.readFileSync(new URL('../src/egress-proxy.js', import.meta.url), 'utf8');
 const sourceBundle = fs.readFileSync(new URL('./build-source-bundle.sh', import.meta.url), 'utf8');
 const license = fs.readFileSync(new URL('../LICENSE', import.meta.url), 'utf8');
@@ -72,12 +76,34 @@ assert.match(qualification, /am-pilot-slicer-core-reproduction-report/);
 assert.match(qualification, /publishedBinaryChecksumSha256/);
 assert.match(qualification, /rebuiltBinaryChecksumSha256/);
 assert.match(qualification, /\.immutable == true/);
+assert.match(qualification, /run-failure-corpus\.mjs/);
+assert.match(qualification, /am-pilot-slicer-core-failure-corpus-report/);
+assert.match(qualification, /failure-qualification-output/);
+assert.equal(
+  qualification.match(/\(cd "\$\{output_dir\}" && sha256sum \.\/\* > SHA256SUMS\)/g)?.length,
+  2
+);
 assert.match(qualificationCorpus, /file:\/\/\/worker\/src\/engine\.js/);
 assert.match(qualificationCorpus, /AM_PILOT_QUALIFICATION_START/);
 assert.match(qualificationCorpus, /AM_PILOT_QUALIFICATION_END/);
 assert.match(qualificationCorpus, /deterministicRepeat: true/);
 assert.match(qualificationCorpus, /chmod\(evidencePath, 0o644\)/);
 assert.match(qualificationCorpus, /corpus-report\.json[\s\S]+mode: 0o644/);
+assert.match(qualificationFailureCorpus, /file:\/\/\/worker\/src\/api-client\.js/);
+assert.match(qualificationFailureCorpus, /file:\/\/\/worker\/src\/plate\.js/);
+assert.match(qualificationFailureCorpus, /file:\/\/\/worker\/src\/process\.js/);
+assert.match(qualificationFailureCorpus, /file:\/\/\/worker\/src\/worker\.js/);
+assert.match(qualificationFailureCorpus, /slicer_engine_failed/);
+assert.match(qualificationFailureCorpus, /slicer_source_3mf_invalid/);
+assert.match(qualificationFailureCorpus, /slicer_source_model_integrity_mismatch/);
+assert.match(qualificationFailureCorpus, /slicer_worker_cancelled/);
+assert.match(qualificationFailureCorpus, /slicer_worker_lease_lost/);
+assert.match(qualificationFailureCorpus, /slicer_engine_timeout/);
+assert.match(qualificationFailureCorpus, /slicer_source_model_download_failed/);
+assert.match(qualificationFailureCorpus, /slicer_gcode_size_invalid/);
+assert.match(qualificationFailureCorpus, /slicer_result_manifest_size_invalid/);
+assert.match(qualificationFailureCorpus, /failure-corpus-report\.json/);
+assert.match(qualificationFailureCorpus, /chmod\(reportPath, 0o644\)/);
 assert.match(egressProxy, /slicer_egress_proxy_rejected/);
 assert.match(egressProxy, /authority\.host !== config\.allowedHost/);
 assert.match(egressProxy, /authority\.port !== config\.allowedPort/);
