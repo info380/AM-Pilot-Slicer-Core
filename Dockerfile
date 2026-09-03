@@ -89,7 +89,7 @@ RUN cmake -S . -B build -G Ninja \
     && LD_LIBRARY_PATH=/opt/prusa/lib ldd /opt/prusa/bin/prusa-slicer \
       | tee /tmp/prusa-slicer-ldd.txt \
     && ! grep -F 'not found' /tmp/prusa-slicer-ldd.txt \
-    && LD_LIBRARY_PATH=/opt/prusa/lib /opt/prusa/bin/prusa-slicer --version \
+    && LD_LIBRARY_PATH=/opt/prusa/lib /opt/prusa/bin/prusa-slicer --help \
       | grep -F '2.9.3'
 
 FROM ${NODE_RUNTIME_IMAGE} AS worker-dependencies
@@ -106,7 +106,7 @@ LABEL org.opencontainers.image.title="AM Pilot Slicer Core Worker" \
       org.opencontainers.image.description="Headless PrusaSlicer worker for the AM Pilot Slicer protocol" \
       org.opencontainers.image.licenses="AGPL-3.0-only" \
       org.opencontainers.image.source="https://github.com/info380/AM-Pilot-Slicer-Core" \
-      org.opencontainers.image.version="0.1.9" \
+      org.opencontainers.image.version="0.1.10" \
       org.opencontainers.image.prusaslicer.version="2.9.3" \
       org.opencontainers.image.prusaslicer.revision="f1776c0a6347bb84986d10eac8db1021f5bd8548"
 
@@ -147,7 +147,7 @@ COPY src ./src
 
 RUN ldd /opt/prusa/bin/prusa-slicer | tee /tmp/prusa-slicer-ldd.txt \
     && ! grep -F 'not found' /tmp/prusa-slicer-ldd.txt \
-    && /opt/prusa/bin/prusa-slicer --version | grep -F '2.9.3' \
+    && /opt/prusa/bin/prusa-slicer --help | grep -F '2.9.3' \
     && mkdir -p /tmp/am-pilot-slicer-worker \
     && chown -R node:node /tmp/am-pilot-slicer-worker /worker
 

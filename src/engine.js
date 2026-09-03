@@ -10,7 +10,7 @@ import { runProcess } from './process.js';
 export const verifyPrusaSlicer = async config => {
   const result = await runProcess({
     command: config.prusaSlicerCommand,
-    args: ['--version'],
+    args: ['--help'],
     cwd: config.workRoot,
     timeoutMs: Math.min(config.requestTimeoutMs, 30_000),
     maximumLogBytes: config.maximumLogBytes
