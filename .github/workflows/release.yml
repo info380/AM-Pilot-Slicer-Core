@@ -66,11 +66,15 @@ jobs:
           IMAGE: ${{ steps.image.outputs.name }}
           DIGEST: ${{ steps.build.outputs.digest }}
         run: cosign sign --yes "${IMAGE}@${DIGEST}"
-      - name: Verify published PrusaSlicer runtime
+      - name: Verify published PrusaSlicer runtime through the worker process boundary
         env:
           IMAGE: ${{ steps.image.outputs.name }}
           DIGEST: ${{ steps.build.outputs.digest }}
-        run: docker run --rm "${IMAGE}@${DIGEST}" /opt/prusa/bin/prusa-slicer --version | grep -F '2.9.3'
+        run: |
+          docker run --rm --entrypoint node "${IMAGE}@${DIGEST}" \
+            --input-type=module \
+            --eval "const { verifyPrusaSlicer } = await import('./src/engine.js'); const version = await verifyPrusaSlicer({ prusaSlicerCommand: process.env.PRUSA_SLICER_CMD, workRoot: process.env.SLICER_WORK_ROOT, requestTimeoutMs: 30000, maximumLogBytes: 262144 }); process.stdout.write(version);" \
+            | grep -F '2.9.3'
       - name: Scan immutable image digest
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
