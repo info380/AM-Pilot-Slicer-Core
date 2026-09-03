@@ -8,6 +8,7 @@ import {
 } from './transform.js';
 
 const MODEL_PATH = '3D/3dmodel.model';
+const MAXIMUM_ARCHIVE_ENTRIES = 128;
 const FIXED_ZIP_TIME = new Date('1980-01-01T00:00:00.000Z');
 const CONTENT_TYPES = `<?xml version="1.0" encoding="UTF-8"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
@@ -66,11 +67,37 @@ export const applyBuildTransformTo3mfXml = (xml, objectTransform) => {
 
 const deterministicEntry = value => [strToU8(value), { level: 6, mtime: FIXED_ZIP_TIME }];
 
-export const buildTransformed3mf = ({ source, objectTransform }) => {
+export const buildTransformed3mf = ({ source, objectTransform, maximumUncompressedBytes }) => {
+  if (!Number.isSafeInteger(maximumUncompressedBytes) || maximumUncompressedBytes <= 0) {
+    throw new WorkerError('A bounded normalized 3MF expansion limit is required.', {
+      code: 'slicer_source_3mf_limit_invalid'
+    });
+  }
+  let entryCount = 0;
+  let totalUncompressedBytes = 0;
   let entries;
   try {
-    entries = unzipSync(source);
+    entries = unzipSync(source, {
+      filter: entry => {
+        entryCount += 1;
+        const originalSize = Number(entry.originalSize);
+        totalUncompressedBytes += originalSize;
+        if (
+          entryCount > MAXIMUM_ARCHIVE_ENTRIES
+          || !Number.isSafeInteger(originalSize)
+          || originalSize < 0
+          || !Number.isSafeInteger(totalUncompressedBytes)
+          || totalUncompressedBytes > maximumUncompressedBytes
+        ) {
+          throw new WorkerError('Normalized 3MF archive exceeds the qualified expansion limits.', {
+            code: 'slicer_source_3mf_expansion_limit_exceeded'
+          });
+        }
+        return entry.name.toLowerCase().endsWith('.model');
+      }
+    });
   } catch (error) {
+    if (error instanceof WorkerError) throw error;
     throw new WorkerError('PrusaSlicer produced an invalid normalized 3MF package.', {
       code: 'slicer_source_3mf_invalid',
       cause: error

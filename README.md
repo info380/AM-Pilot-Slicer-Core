@@ -56,11 +56,37 @@ temporary directory is deleted after every completion or failure.
 | `SLICER_WORKER_CONTROL_TOKEN` | Dedicated secret, at least 32 bytes |
 | `SLICER_WORKER_ID` | Stable deployment instance identity |
 | `SLICER_IMAGE_DIGEST` | Exact deployed OCI digest (`sha256:...`) |
+| `SLICER_EGRESS_PROXY_URL` | Dedicated HTTP(S) CONNECT proxy origin used for every API request |
+| `SLICER_EGRESS_PROXY_REQUIRED` | Set to `true` on production workers so startup fails unless the proxy is configured |
 
 The image supplies `PRUSA_SLICER_CMD=/opt/prusa/bin/prusa-slicer` and
 `SLICER_WORK_ROOT=/tmp/am-pilot-slicer-worker`. Both may be overridden, but
 startup fails unless the binary and dedicated absolute work directory are
 valid.
+
+For a production deployment, place the worker on an internal-only container
+network and expose only a separately administered CONNECT proxy that permits
+`api.am-pilot.com:443`. Set both egress-proxy variables above. The worker also
+rejects any request whose origin differs from `AM_PILOT_API_BASE_URL`; the
+network boundary remains authoritative if the worker process is compromised.
+
+The same immutable image can run that dedicated proxy with
+`node src/egress-proxy.js`. It requires all six settings below and has no
+defaults or alternate destination:
+
+| Variable | Meaning |
+| --- | --- |
+| `SLICER_EGRESS_PROXY_ALLOWED_HOST` | Exact API DNS hostname or IP address |
+| `SLICER_EGRESS_PROXY_ALLOWED_PORT` | Exact API TCP port |
+| `SLICER_EGRESS_PROXY_LISTEN_HOST` | Internal-network listen address |
+| `SLICER_EGRESS_PROXY_LISTEN_PORT` | Unprivileged internal proxy port |
+| `SLICER_EGRESS_PROXY_IDLE_TIMEOUT_MS` | Bounded tunnel idle timeout |
+| `SLICER_EGRESS_PROXY_MAX_CONNECTIONS` | Bounded simultaneous connection count |
+
+The proxy rejects ordinary HTTP forwarding and every CONNECT authority except
+the exact configured host and port. Run it as a separate container joined to
+both the worker's internal-only network and a controlled egress network; the
+worker container must join only the internal network.
 
 ## Explicit runtime defaults
 
@@ -75,11 +101,15 @@ enough for every customer model.
 | `SLICER_REQUEST_TIMEOUT_MS` | 30000 |
 | `SLICER_JOB_TIMEOUT_MS` | 1200000 |
 | `SLICER_ENGINE_THREADS` | 1 |
-| `SLICER_MAX_MODEL_BYTES` | 536870912 |
-| `SLICER_MAX_GCODE_BYTES` | 536870912 |
+| `SLICER_MAX_MODEL_BYTES` | 33554432 |
+| `SLICER_MAX_TOTAL_MODEL_BYTES` | 134217728 |
+| `SLICER_MAX_NORMALIZED_MODEL_BYTES` | 67108864 |
+| `SLICER_MAX_TOTAL_NORMALIZED_BYTES` | 134217728 |
+| `SLICER_MAX_PLATE_INPUT_BYTES` | 201326592 |
+| `SLICER_MAX_GCODE_BYTES` | 67108864 |
 | `SLICER_MAX_MANIFEST_BYTES` | 1048576 |
-| `SLICER_MAX_MODELS_PER_RUN` | 1000 |
-| `SLICER_MAX_OBJECTS_PER_PLATE` | 1000 |
+| `SLICER_MAX_MODELS_PER_RUN` | 8 |
+| `SLICER_MAX_OBJECTS_PER_PLATE` | 32 |
 
 Production promotion must record measured memory, CPU time, temporary storage,
 and output sizes from the qualification corpus. If the EUR 7 worker exceeds a

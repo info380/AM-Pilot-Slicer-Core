@@ -1,0 +1,245 @@
+name: Qualify immutable candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Immutable GitHub release tag
+        required: true
+        type: string
+      image_digest:
+        description: Immutable GHCR sha256 digest
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  reproduce:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 1
+      - name: Resolve immutable release tag
+        id: candidate
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          IMAGE_DIGEST: ${{ inputs.image_digest }}
+        run: |
+          set -euo pipefail
+          [[ "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "${IMAGE_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]
+          readonly metadata="${RUNNER_TEMP}/release-metadata.json"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --header 'Accept: application/vnd.github+json' \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" \
+            --output "${metadata}"
+          jq -e \
+            --arg tag "${RELEASE_TAG}" \
+            '.tag_name == $tag and .immutable == true and .draft == false and .prerelease == false' \
+            "${metadata}" >/dev/null
+          git fetch --no-tags --depth=1 origin \
+            "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
+          git checkout --detach "refs/tags/${RELEASE_TAG}"
+          readonly source_revision="$(git rev-parse HEAD)"
+          test "$(node -p "'v' + require('./package.json').version")" = "${RELEASE_TAG}"
+          echo "source_revision=${source_revision}" >> "${GITHUB_OUTPUT}"
+      - name: Download published binary checksum
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          readonly release_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            "${release_url}/prusa-slicer-binary.SHA256" \
+            --output "${RUNNER_TEMP}/published-prusa-slicer.SHA256"
+          [[ "$(cut -d ' ' -f 1 "${RUNNER_TEMP}/published-prusa-slicer.SHA256")" =~ ^[0-9a-f]{64}$ ]]
+      - name: Rebuild from the immutable release source
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build \
+            --platform linux/amd64 \
+            --tag am-pilot-slicer-core-reproduction:${GITHUB_RUN_ID} \
+            . 2>&1 | tee "${RUNNER_TEMP}/reproduction-build.log"
+      - name: Compare rebuilt engine binary
+        shell: bash
+        env:
+          IMAGE_DIGEST: ${{ inputs.image_digest }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          SOURCE_REVISION: ${{ steps.candidate.outputs.source_revision }}
+        run: |
+          set -euo pipefail
+          readonly image="am-pilot-slicer-core-reproduction:${GITHUB_RUN_ID}"
+          readonly container_id="$(docker create "${image}")"
+          trap 'docker rm -f "${container_id}" >/dev/null 2>&1 || true' EXIT
+          docker cp "${container_id}:/opt/prusa/bin/prusa-slicer" \
+            "${RUNNER_TEMP}/rebuilt-prusa-slicer"
+          readonly published_checksum="$(cut -d ' ' -f 1 "${RUNNER_TEMP}/published-prusa-slicer.SHA256")"
+          readonly rebuilt_checksum="$(sha256sum "${RUNNER_TEMP}/rebuilt-prusa-slicer" | cut -d ' ' -f 1)"
+          jq -n \
+            --arg releaseTag "${RELEASE_TAG}" \
+            --arg sourceRevision "${SOURCE_REVISION}" \
+            --arg imageDigest "${IMAGE_DIGEST}" \
+            --arg publishedBinaryChecksumSha256 "${published_checksum}" \
+            --arg rebuiltBinaryChecksumSha256 "${rebuilt_checksum}" \
+            '{
+              schema: "am-pilot-slicer-core-reproduction-report",
+              version: 1,
+              status: (if $publishedBinaryChecksumSha256 == $rebuiltBinaryChecksumSha256 then "passed" else "failed" end),
+              releaseTag: $releaseTag,
+              sourceRevision: $sourceRevision,
+              imageDigest: $imageDigest,
+              publishedBinaryChecksumSha256: $publishedBinaryChecksumSha256,
+              rebuiltBinaryChecksumSha256: $rebuiltBinaryChecksumSha256
+            }' > "${RUNNER_TEMP}/reproduction-report.json"
+          test "${rebuilt_checksum}" = "${published_checksum}"
+      - name: Upload reproduction evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: slicer-core-reproduction-${{ inputs.release_tag }}-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/release-metadata.json
+            ${{ runner.temp }}/published-prusa-slicer.SHA256
+            ${{ runner.temp }}/reproduction-build.log
+            ${{ runner.temp }}/reproduction-report.json
+          if-no-files-found: error
+          retention-days: 90
+
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Validate immutable candidate identity
+        id: candidate
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          IMAGE_DIGEST: ${{ inputs.image_digest }}
+        run: |
+          set -euo pipefail
+          [[ "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "${IMAGE_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]
+          readonly image="ghcr.io/info380/am-pilot-slicer-core@${IMAGE_DIGEST}"
+          readonly release_url="https://github.com/info380/AM-Pilot-Slicer-Core/releases/download/${RELEASE_TAG}"
+          mkdir -p "${RUNNER_TEMP}/release-evidence"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --header 'Accept: application/vnd.github+json' \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" \
+            --output "${RUNNER_TEMP}/release-evidence/release-metadata.json"
+          jq -e \
+            --arg tag "${RELEASE_TAG}" \
+            '.tag_name == $tag and .immutable == true and .draft == false and .prerelease == false' \
+            "${RUNNER_TEMP}/release-evidence/release-metadata.json" >/dev/null
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            "${release_url}/EVIDENCE_SHA256SUMS" \
+            --output "${RUNNER_TEMP}/release-evidence/EVIDENCE_SHA256SUMS"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            "${release_url}/release-evidence.json" \
+            --output "${RUNNER_TEMP}/release-evidence/release-evidence.json"
+          grep -E '  \*?release-evidence/release-evidence\.json$' \
+            "${RUNNER_TEMP}/release-evidence/EVIDENCE_SHA256SUMS" \
+            | sed 's#release-evidence/##' \
+            | (cd "${RUNNER_TEMP}/release-evidence" && sha256sum --check --strict -)
+          jq -e \
+            --arg tag "${RELEASE_TAG}" \
+            --arg digest "${IMAGE_DIGEST}" \
+            '.semanticVersion == $tag and .imageDigest == $digest and .qualification.status == "candidate"' \
+            "${RUNNER_TEMP}/release-evidence/release-evidence.json" >/dev/null
+          echo "image=${image}" >> "${GITHUB_OUTPUT}"
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
+      - name: Verify digest signature identity
+        shell: bash
+        env:
+          IMAGE: ${{ steps.candidate.outputs.image }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          cosign verify \
+            --certificate-identity "https://github.com/info380/AM-Pilot-Slicer-Core/.github/workflows/release.yml@refs/tags/${RELEASE_TAG}" \
+            --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+            "${IMAGE}" > "${RUNNER_TEMP}/release-evidence/signature-verification.json"
+      - name: Pull exact candidate digest
+        env:
+          IMAGE: ${{ steps.candidate.outputs.image }}
+        run: docker pull "${IMAGE}"
+      - name: Run synthetic corpus under production resource boundaries
+        id: corpus
+        shell: bash
+        env:
+          IMAGE: ${{ steps.candidate.outputs.image }}
+          IMAGE_DIGEST: ${{ inputs.image_digest }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          readonly output_dir="${RUNNER_TEMP}/qualification-output"
+          mkdir -p "${output_dir}"
+          chmod 0777 "${output_dir}"
+          readonly container_id="$(docker create \
+            --platform linux/amd64 \
+            --network none \
+            --read-only \
+            --memory 512m \
+            --memory-swap 512m \
+            --cpus 0.5 \
+            --pids-limit 256 \
+            --security-opt no-new-privileges \
+            --cap-drop ALL \
+            --tmpfs /tmp:rw,nosuid,nodev,size=384m,mode=1777 \
+            --mount type=bind,source="${GITHUB_WORKSPACE}/qualification",target=/qualification,readonly \
+            --mount type=bind,source="${output_dir}",target=/qualification-output \
+            --env "QUALIFICATION_IMAGE_DIGEST=${IMAGE_DIGEST}" \
+            --env "QUALIFICATION_RELEASE_TAG=${RELEASE_TAG}" \
+            --env QUALIFICATION_OUTPUT_DIR=/qualification-output \
+            --entrypoint node \
+            "${IMAGE}" \
+            /qualification/run-corpus.mjs)"
+          trap 'docker rm -f "${container_id}" >/dev/null 2>&1 || true' EXIT
+          docker inspect "${container_id}" > "${output_dir}/container-inspect.json"
+          jq -e '
+            .[0].Config.User == "node" and
+            .[0].HostConfig.NetworkMode == "none" and
+            .[0].HostConfig.ReadonlyRootfs == true and
+            .[0].HostConfig.Memory == 536870912 and
+            .[0].HostConfig.MemorySwap == 536870912 and
+            .[0].HostConfig.NanoCpus == 500000000 and
+            .[0].HostConfig.PidsLimit == 256 and
+            (.[0].HostConfig.CapDrop | index("ALL") != null) and
+            (.[0].HostConfig.SecurityOpt | index("no-new-privileges") != null)
+          ' "${output_dir}/container-inspect.json" >/dev/null
+          docker start --attach "${container_id}"
+          jq -e '
+            .schema == "am-pilot-slicer-core-corpus-report" and
+            .version == 1 and
+            .status == "passed" and
+            .release.imageDigest == $digest and
+            .corpus.deterministicRepeat == true and
+            (.attempts | length) == 2 and
+            .attempts[0].checksumSha256 == .attempts[1].checksumSha256 and
+            .resources.cgroupMemoryPeakBytes <= 536870912
+          ' --arg digest "${IMAGE_DIGEST}" "${output_dir}/corpus-report.json" >/dev/null
+          sha256sum "${output_dir}"/* > "${output_dir}/SHA256SUMS"
+      - name: Upload qualification evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: slicer-core-qualification-${{ inputs.release_tag }}-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/qualification-output/
+            ${{ runner.temp }}/release-evidence/
+          if-no-files-found: error
+          retention-days: 90

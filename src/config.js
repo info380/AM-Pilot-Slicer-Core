@@ -7,6 +7,7 @@ import {
   WORKER_PROTOCOL_VERSION
 } from './constants.js';
 import { WorkerError } from './errors.js';
+import { normalizeEgressProxyUrl } from './network.js';
 
 const IMAGE_DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
 const WORKER_ID_PATTERN = /^[a-z0-9][a-z0-9._:-]{0,239}$/;
@@ -27,6 +28,14 @@ const boundedInteger = (environment, key, fallback, minimum, maximum) => {
     });
   }
   return value;
+};
+
+const strictBoolean = (environment, key, fallback = false) => {
+  const raw = String(environment[key] ?? '').trim().toLowerCase();
+  if (!raw) return fallback;
+  if (raw === 'true') return true;
+  if (raw === 'false') return false;
+  throw new WorkerError(`${key} must be true or false.`, { code: 'slicer_worker_configuration_invalid' });
 };
 
 const apiBaseUrl = (environment, { allowInsecureLoopback = false } = {}) => {
@@ -83,6 +92,57 @@ export const loadWorkerConfig = (environment = process.env, options = {}) => {
       code: 'slicer_worker_configuration_invalid'
     });
   }
+  const egressProxyUrl = normalizeEgressProxyUrl(environment.SLICER_EGRESS_PROXY_URL);
+  const egressProxyRequired = strictBoolean(environment, 'SLICER_EGRESS_PROXY_REQUIRED', false);
+  if (egressProxyRequired && !egressProxyUrl) {
+    throw new WorkerError('SLICER_EGRESS_PROXY_URL is required when SLICER_EGRESS_PROXY_REQUIRED is true.', {
+      code: 'slicer_worker_configuration_invalid'
+    });
+  }
+  const maximumModelBytes = boundedInteger(
+    environment,
+    'SLICER_MAX_MODEL_BYTES',
+    DEFAULTS.maximumModelBytes,
+    1_048_576,
+    2_147_483_648
+  );
+  const maximumTotalModelBytes = boundedInteger(
+    environment,
+    'SLICER_MAX_TOTAL_MODEL_BYTES',
+    DEFAULTS.maximumTotalModelBytes,
+    1_048_576,
+    2_147_483_648
+  );
+  const maximumNormalizedModelBytes = boundedInteger(
+    environment,
+    'SLICER_MAX_NORMALIZED_MODEL_BYTES',
+    DEFAULTS.maximumNormalizedModelBytes,
+    1_048_576,
+    2_147_483_648
+  );
+  const maximumTotalNormalizedBytes = boundedInteger(
+    environment,
+    'SLICER_MAX_TOTAL_NORMALIZED_BYTES',
+    DEFAULTS.maximumTotalNormalizedBytes,
+    1_048_576,
+    2_147_483_648
+  );
+  const maximumPlateInputBytes = boundedInteger(
+    environment,
+    'SLICER_MAX_PLATE_INPUT_BYTES',
+    DEFAULTS.maximumPlateInputBytes,
+    1_048_576,
+    2_147_483_648
+  );
+  if (
+    maximumTotalModelBytes < maximumModelBytes
+    || maximumTotalNormalizedBytes < maximumNormalizedModelBytes
+    || maximumPlateInputBytes < maximumNormalizedModelBytes
+  ) {
+    throw new WorkerError('Aggregate Slicer byte limits must not be smaller than their per-model limits.', {
+      code: 'slicer_worker_configuration_invalid'
+    });
+  }
   return Object.freeze({
     apiBaseUrl: apiBaseUrl(environment, options),
     controlToken,
@@ -93,11 +153,17 @@ export const loadWorkerConfig = (environment = process.env, options = {}) => {
     expectedPrusaVersion: PRUSA_SLICER_VERSION,
     prusaSlicerCommand,
     workRoot,
+    egressProxyUrl,
+    egressProxyRequired,
     pollIntervalMs: boundedInteger(environment, 'SLICER_POLL_INTERVAL_MS', DEFAULTS.pollIntervalMs, 1_000, 60_000),
     heartbeatIntervalMs: boundedInteger(environment, 'SLICER_HEARTBEAT_INTERVAL_MS', DEFAULTS.heartbeatIntervalMs, 5_000, 60_000),
     requestTimeoutMs: boundedInteger(environment, 'SLICER_REQUEST_TIMEOUT_MS', DEFAULTS.requestTimeoutMs, 1_000, 120_000),
     jobTimeoutMs: boundedInteger(environment, 'SLICER_JOB_TIMEOUT_MS', DEFAULTS.jobTimeoutMs, 30_000, 7_200_000),
-    maximumModelBytes: boundedInteger(environment, 'SLICER_MAX_MODEL_BYTES', DEFAULTS.maximumModelBytes, 1_048_576, 2_147_483_648),
+    maximumModelBytes,
+    maximumTotalModelBytes,
+    maximumNormalizedModelBytes,
+    maximumTotalNormalizedBytes,
+    maximumPlateInputBytes,
     maximumGcodeBytes: boundedInteger(environment, 'SLICER_MAX_GCODE_BYTES', DEFAULTS.maximumGcodeBytes, 1_048_576, 2_147_483_648),
     maximumManifestBytes: boundedInteger(environment, 'SLICER_MAX_MANIFEST_BYTES', DEFAULTS.maximumManifestBytes, 1_024, 8_388_608),
     maximumObjectsPerPlate: boundedInteger(environment, 'SLICER_MAX_OBJECTS_PER_PLATE', DEFAULTS.maximumObjectsPerPlate, 1, 10_000),

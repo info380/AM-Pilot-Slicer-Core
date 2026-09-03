@@ -1,5 +1,6 @@
 import { loadWorkerConfig } from './config.js';
 import { asWorkerError } from './errors.js';
+import { createApiTransport } from './network.js';
 import { runWorker } from './worker.js';
 
 const shutdown = new AbortController();
@@ -9,7 +10,12 @@ process.once('SIGINT', () => stop('SIGINT'));
 
 try {
   const config = loadWorkerConfig();
-  await runWorker({ config, signal: shutdown.signal });
+  const transport = createApiTransport(config);
+  try {
+    await runWorker({ config, fetchImpl: transport.fetchApi, signal: shutdown.signal });
+  } finally {
+    await transport.close();
+  }
 } catch (rawError) {
   const error = asWorkerError(rawError);
   process.stderr.write(`${JSON.stringify({
