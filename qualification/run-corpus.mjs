@@ -324,6 +324,7 @@ try {
     }
     const evidencePath = path.join(OUTPUT_ROOT, `mixed-corpus-attempt-${attempt}.gcode`);
     await fs.copyFile(result.gcodePath, evidencePath);
+    await fs.chmod(evidencePath, 0o644);
     attempts.push(Object.freeze({
       attempt,
       gcodeFile: path.basename(evidencePath),
@@ -383,6 +384,6 @@ const report = Object.freeze({
 });
 
 await fs.writeFile(path.join(OUTPUT_ROOT, 'corpus-report.json'), `${JSON.stringify(report, null, 2)}\n`, {
-  mode: 0o600
+  mode: 0o644
 });
 process.stdout.write(`${JSON.stringify(report)}\n`);

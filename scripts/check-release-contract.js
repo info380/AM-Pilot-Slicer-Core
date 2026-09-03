@@ -76,6 +76,8 @@ assert.match(qualificationCorpus, /file:\/\/\/worker\/src\/engine\.js/);
 assert.match(qualificationCorpus, /AM_PILOT_QUALIFICATION_START/);
 assert.match(qualificationCorpus, /AM_PILOT_QUALIFICATION_END/);
 assert.match(qualificationCorpus, /deterministicRepeat: true/);
+assert.match(qualificationCorpus, /chmod\(evidencePath, 0o644\)/);
+assert.match(qualificationCorpus, /corpus-report\.json[\s\S]+mode: 0o644/);
 assert.match(egressProxy, /slicer_egress_proxy_rejected/);
 assert.match(egressProxy, /authority\.host !== config\.allowedHost/);
 assert.match(egressProxy, /authority\.port !== config\.allowedPort/);
