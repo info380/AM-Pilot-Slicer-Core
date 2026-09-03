@@ -79,6 +79,10 @@ assert.match(qualification, /\.immutable == true/);
 assert.match(qualification, /run-failure-corpus\.mjs/);
 assert.match(qualification, /am-pilot-slicer-core-failure-corpus-report/);
 assert.match(qualification, /failure-qualification-output/);
+assert.equal(
+  qualification.match(/\(cd "\$\{output_dir\}" && sha256sum \.\/\* > SHA256SUMS\)/g)?.length,
+  2
+);
 assert.match(qualificationCorpus, /file:\/\/\/worker\/src\/engine\.js/);
 assert.match(qualificationCorpus, /AM_PILOT_QUALIFICATION_START/);
 assert.match(qualificationCorpus, /AM_PILOT_QUALIFICATION_END/);
