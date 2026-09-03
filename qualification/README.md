@@ -11,6 +11,10 @@ XYZ rotation, supports, material settings, Marlin 2 output, and custom start/end
 G-code. The same plate is sliced twice from the same immutable inputs and the
 workflow fails unless both G-code checksums match.
 
+The synthetic G-code and JSON report are written with read-only-for-others file
+permissions so the separate GitHub runner identity can validate and package the
+bind-mounted evidence. They contain no customer or production input.
+
 PrusaSlicer places the wall-clock time in the first generated G-code comment.
 The worker replaces only that exact timestamp with the conventional reproducible
 build epoch `1970-01-01 at 00:00:00 UTC` before hashing or publishing output.
