@@ -19,8 +19,8 @@ test('emits a minimal deterministic geometry-only 3MF with composed placement', 
     'Metadata/Slic3r_PE.config': strToU8('post_process = unsafe-command')
   });
   const plate = [2, 0, 0, 0, 2, 0, 0, 0, 2, 10, 20, 0];
-  const first = buildTransformed3mf({ source, objectTransform: plate });
-  const second = buildTransformed3mf({ source, objectTransform: plate });
+  const first = buildTransformed3mf({ source, objectTransform: plate, maximumUncompressedBytes: 1024 * 1024 });
+  const second = buildTransformed3mf({ source, objectTransform: plate, maximumUncompressedBytes: 1024 * 1024 });
   assert.deepEqual(first, second);
   const entries = unzipSync(first);
   assert.deepEqual(Object.keys(entries).sort(), [
@@ -35,4 +35,16 @@ test('emits a minimal deterministic geometry-only 3MF with composed placement', 
     apply3mfTransform({ x: 1, y: 0, z: 0 }, parse3mfTransform(transformText)),
     { x: 22, y: 20, z: 0 }
   );
+});
+
+test('rejects a normalized 3MF whose expansion exceeds the configured budget', () => {
+  const source = zipSync({
+    '3D/3dmodel.model': strToU8(sourceXml),
+    'Metadata/oversized.txt': strToU8('x'.repeat(2048))
+  });
+  assert.throws(() => buildTransformed3mf({
+    source,
+    objectTransform: [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0],
+    maximumUncompressedBytes: 1024
+  }), { code: 'slicer_source_3mf_expansion_limit_exceeded' });
 });

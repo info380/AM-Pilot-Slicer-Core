@@ -99,6 +99,50 @@ export const loadWorkerConfig = (environment = process.env, options = {}) => {
       code: 'slicer_worker_configuration_invalid'
     });
   }
+  const maximumModelBytes = boundedInteger(
+    environment,
+    'SLICER_MAX_MODEL_BYTES',
+    DEFAULTS.maximumModelBytes,
+    1_048_576,
+    2_147_483_648
+  );
+  const maximumTotalModelBytes = boundedInteger(
+    environment,
+    'SLICER_MAX_TOTAL_MODEL_BYTES',
+    DEFAULTS.maximumTotalModelBytes,
+    1_048_576,
+    2_147_483_648
+  );
+  const maximumNormalizedModelBytes = boundedInteger(
+    environment,
+    'SLICER_MAX_NORMALIZED_MODEL_BYTES',
+    DEFAULTS.maximumNormalizedModelBytes,
+    1_048_576,
+    2_147_483_648
+  );
+  const maximumTotalNormalizedBytes = boundedInteger(
+    environment,
+    'SLICER_MAX_TOTAL_NORMALIZED_BYTES',
+    DEFAULTS.maximumTotalNormalizedBytes,
+    1_048_576,
+    2_147_483_648
+  );
+  const maximumPlateInputBytes = boundedInteger(
+    environment,
+    'SLICER_MAX_PLATE_INPUT_BYTES',
+    DEFAULTS.maximumPlateInputBytes,
+    1_048_576,
+    2_147_483_648
+  );
+  if (
+    maximumTotalModelBytes < maximumModelBytes
+    || maximumTotalNormalizedBytes < maximumNormalizedModelBytes
+    || maximumPlateInputBytes < maximumNormalizedModelBytes
+  ) {
+    throw new WorkerError('Aggregate Slicer byte limits must not be smaller than their per-model limits.', {
+      code: 'slicer_worker_configuration_invalid'
+    });
+  }
   return Object.freeze({
     apiBaseUrl: apiBaseUrl(environment, options),
     controlToken,
@@ -115,7 +159,11 @@ export const loadWorkerConfig = (environment = process.env, options = {}) => {
     heartbeatIntervalMs: boundedInteger(environment, 'SLICER_HEARTBEAT_INTERVAL_MS', DEFAULTS.heartbeatIntervalMs, 5_000, 60_000),
     requestTimeoutMs: boundedInteger(environment, 'SLICER_REQUEST_TIMEOUT_MS', DEFAULTS.requestTimeoutMs, 1_000, 120_000),
     jobTimeoutMs: boundedInteger(environment, 'SLICER_JOB_TIMEOUT_MS', DEFAULTS.jobTimeoutMs, 30_000, 7_200_000),
-    maximumModelBytes: boundedInteger(environment, 'SLICER_MAX_MODEL_BYTES', DEFAULTS.maximumModelBytes, 1_048_576, 2_147_483_648),
+    maximumModelBytes,
+    maximumTotalModelBytes,
+    maximumNormalizedModelBytes,
+    maximumTotalNormalizedBytes,
+    maximumPlateInputBytes,
     maximumGcodeBytes: boundedInteger(environment, 'SLICER_MAX_GCODE_BYTES', DEFAULTS.maximumGcodeBytes, 1_048_576, 2_147_483_648),
     maximumManifestBytes: boundedInteger(environment, 'SLICER_MAX_MANIFEST_BYTES', DEFAULTS.maximumManifestBytes, 1_024, 8_388_608),
     maximumObjectsPerPlate: boundedInteger(environment, 'SLICER_MAX_OBJECTS_PER_PLATE', DEFAULTS.maximumObjectsPerPlate, 1, 10_000),

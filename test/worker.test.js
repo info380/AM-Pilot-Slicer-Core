@@ -13,7 +13,11 @@ const digest = `sha256:${'a'.repeat(64)}`;
 const config = Object.freeze({
   protocolVersion: 1,
   engineKey: 'fdm.am_pilot_prusa_core',
-  imageDigest: digest
+  imageDigest: digest,
+  maximumModelBytes: 32,
+  maximumTotalModelBytes: 48,
+  maximumModelsPerRun: 2,
+  maximumObjectsPerPlate: 2
 });
 
 const claim = () => ({
@@ -38,7 +42,9 @@ const claim = () => ({
   lease: { token: 'lease-token'.padEnd(48, 'x') },
   inputSnapshot: {
     schema: 'am-pilot-slicer-input-snapshot',
-    version: 1
+    version: 1,
+    models: [{ modelId: 'model-01', sizeBytes: 16 }],
+    plate: { objects: [{ id: 'object-01', fileId: 'file-01' }] }
   },
   effectiveConfiguration: {
     schema: 'am-pilot-slicer-effective-config',
@@ -60,6 +66,14 @@ test('accepts only claims pinned to the complete immutable release identity', ()
     }, config),
     { code: 'slicer_worker_claim_invalid' }
   );
+  const oversized = claim();
+  oversized.inputSnapshot.models = [
+    { modelId: 'model-01', sizeBytes: 32 },
+    { modelId: 'model-02', sizeBytes: 32 }
+  ];
+  assert.throws(() => validateClaim(oversized, config), {
+    code: 'slicer_source_model_total_size_exceeded'
+  });
 });
 
 test('retries transient model downloads without retaining a partial file', async t => {

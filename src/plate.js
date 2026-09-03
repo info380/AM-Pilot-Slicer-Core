@@ -64,6 +64,7 @@ export const materializePlateInputs = async ({
 }) => {
   const { models, objects } = verifyPlateContract({ inputSnapshot, effectiveConfiguration, config });
   const sourceByProjectFileId = new Map();
+  let totalNormalizedBytes = 0;
   for (let index = 0; index < models.length; index += 1) {
     const model = models[index];
     const sourcePath = downloadedModels.get(model.modelId);
@@ -77,10 +78,24 @@ export const materializePlateInputs = async ({
       message: `Normalizing source model ${index + 1} of ${models.length}.`
     });
     await normalizeSourceTo3mf({ sourcePath, outputPath: normalizedPath, config, signal });
+    const normalizedSize = Number((await fs.stat(normalizedPath)).size);
+    totalNormalizedBytes += normalizedSize;
+    if (
+      !Number.isSafeInteger(normalizedSize)
+      || normalizedSize <= 0
+      || normalizedSize > config.maximumNormalizedModelBytes
+      || !Number.isSafeInteger(totalNormalizedBytes)
+      || totalNormalizedBytes > config.maximumTotalNormalizedBytes
+    ) {
+      throw new WorkerError('Normalized Slicer geometry exceeds the qualified byte limits.', {
+        code: 'slicer_normalized_model_size_exceeded'
+      });
+    }
     sourceByProjectFileId.set(model.projectFileId, await fs.readFile(normalizedPath));
   }
 
   const result = [];
+  let totalPlateInputBytes = 0;
   for (let index = 0; index < objects.length; index += 1) {
     const object = objects[index];
     const source = sourceByProjectFileId.get(object.fileId);
@@ -100,7 +115,18 @@ export const materializePlateInputs = async ({
       workDir,
       `plate-${String(index + 1).padStart(4, '0')}-${safeSegment(object.id, 'object')}.3mf`
     );
-    await fs.writeFile(targetPath, buildTransformed3mf({ source, objectTransform }), { mode: 0o600 });
+    const transformed = buildTransformed3mf({
+      source,
+      objectTransform,
+      maximumUncompressedBytes: config.maximumNormalizedModelBytes
+    });
+    totalPlateInputBytes += transformed.length;
+    if (!Number.isSafeInteger(totalPlateInputBytes) || totalPlateInputBytes > config.maximumPlateInputBytes) {
+      throw new WorkerError('Generated plate inputs exceed the qualified aggregate byte limit.', {
+        code: 'slicer_plate_input_size_exceeded'
+      });
+    }
+    await fs.writeFile(targetPath, transformed, { mode: 0o600 });
     result.push(targetPath);
   }
   return result;

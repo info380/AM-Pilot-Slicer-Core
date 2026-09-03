@@ -77,6 +77,33 @@ export const validateClaim = (claim, config) => {
       code: 'slicer_worker_claim_invalid'
     });
   }
+  const models = Array.isArray(claim.inputSnapshot.models) ? claim.inputSnapshot.models : [];
+  const objects = Array.isArray(claim.inputSnapshot.plate?.objects) ? claim.inputSnapshot.plate.objects : [];
+  if (
+    models.length === 0
+    || objects.length === 0
+    || models.length > config.maximumModelsPerRun
+    || objects.length > config.maximumObjectsPerPlate
+  ) {
+    throw new WorkerError('The claimed Slicer run exceeds the qualified model or object count.', {
+      code: 'slicer_input_limit_exceeded'
+    });
+  }
+  let totalModelBytes = 0;
+  for (const model of models) {
+    const sizeBytes = Number(model?.sizeBytes);
+    if (!Number.isSafeInteger(sizeBytes) || sizeBytes <= 0 || sizeBytes > config.maximumModelBytes) {
+      throw new WorkerError('The claimed Slicer run contains an invalid source-model size.', {
+        code: 'slicer_source_model_size_invalid'
+      });
+    }
+    totalModelBytes += sizeBytes;
+    if (!Number.isSafeInteger(totalModelBytes) || totalModelBytes > config.maximumTotalModelBytes) {
+      throw new WorkerError('The claimed Slicer run exceeds the aggregate source-model byte limit.', {
+        code: 'slicer_source_model_total_size_exceeded'
+      });
+    }
+  }
   return claim;
 };
 

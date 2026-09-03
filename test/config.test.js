@@ -18,8 +18,19 @@ test('loads an immutable fail-closed worker identity', () => {
   assert.equal(config.engineKey, 'fdm.am_pilot_prusa_core');
   assert.equal(config.protocolVersion, 1);
   assert.equal(config.engineThreads, 1);
-  assert.equal(config.maximumGcodeBytes, 536_870_912);
+  assert.equal(config.maximumModelBytes, 33_554_432);
+  assert.equal(config.maximumTotalModelBytes, 134_217_728);
+  assert.equal(config.maximumNormalizedModelBytes, 67_108_864);
+  assert.equal(config.maximumTotalNormalizedBytes, 134_217_728);
+  assert.equal(config.maximumPlateInputBytes, 201_326_592);
+  assert.equal(config.maximumGcodeBytes, 67_108_864);
+  assert.equal(config.maximumModelsPerRun, 8);
+  assert.equal(config.maximumObjectsPerPlate, 32);
   assert.ok(Object.isFrozen(config));
+  assert.throws(() => loadWorkerConfig(environment({
+    SLICER_MAX_MODEL_BYTES: '2097152',
+    SLICER_MAX_TOTAL_MODEL_BYTES: '1048576'
+  }), { allowInsecureLoopback: true }), /Aggregate Slicer byte limits/);
 });
 
 test('rejects insecure non-loopback API origins', () => {
