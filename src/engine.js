@@ -4,7 +4,7 @@ import path from 'node:path';
 import { PRUSA_SLICER_VERSION } from './constants.js';
 import { serializePrusaConfig } from './config-ini.js';
 import { WorkerError } from './errors.js';
-import { extractWarnings, inspectGcode } from './gcode.js';
+import { canonicalizeGcodeHeader, extractWarnings, inspectGcode } from './gcode.js';
 import { runProcess } from './process.js';
 
 export const verifyPrusaSlicer = async config => {
@@ -71,6 +71,7 @@ export const runSlicerEngine = async ({
     progressPercent: 85,
     message: 'Validating G-code and immutable output evidence.'
   });
+  await canonicalizeGcodeHeader(gcodePath);
   const inspection = await inspectGcode(gcodePath, config.maximumGcodeBytes);
   return Object.freeze({
     gcodePath,
