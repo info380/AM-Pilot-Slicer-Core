@@ -11,6 +11,8 @@ import {
 
 const dockerfile = fs.readFileSync(new URL('../Dockerfile', import.meta.url), 'utf8');
 const release = fs.readFileSync(new URL('../.github/workflows/release.yml', import.meta.url), 'utf8');
+const qualification = fs.readFileSync(new URL('../.github/workflows/qualification.yml', import.meta.url), 'utf8');
+const qualificationCorpus = fs.readFileSync(new URL('../qualification/run-corpus.mjs', import.meta.url), 'utf8');
 const sourceBundle = fs.readFileSync(new URL('./build-source-bundle.sh', import.meta.url), 'utf8');
 const license = fs.readFileSync(new URL('../LICENSE', import.meta.url), 'utf8');
 
@@ -53,6 +55,20 @@ assert.match(release, /sbom\.spdx\.json/);
 assert.match(release, /provenance\.slsa\.json/);
 assert.match(release, /signature-verification\.json/);
 assert.match(release, /EVIDENCE_SHA256SUMS/);
+assert.match(qualification, /--network none/);
+assert.match(qualification, /--read-only/);
+assert.match(qualification, /--memory 512m/);
+assert.match(qualification, /--memory-swap 512m/);
+assert.match(qualification, /--cpus 0\.5/);
+assert.match(qualification, /--pids-limit 256/);
+assert.match(qualification, /--security-opt no-new-privileges/);
+assert.match(qualification, /--cap-drop ALL/);
+assert.match(qualification, /ghcr\.io\/info380\/am-pilot-slicer-core@\$\{IMAGE_DIGEST\}/);
+assert.match(qualification, /cosign verify/);
+assert.match(qualificationCorpus, /file:\/\/\/worker\/src\/engine\.js/);
+assert.match(qualificationCorpus, /AM_PILOT_QUALIFICATION_START/);
+assert.match(qualificationCorpus, /AM_PILOT_QUALIFICATION_END/);
+assert.match(qualificationCorpus, /deterministicRepeat: true/);
 assert.match(license, /GNU AFFERO GENERAL PUBLIC LICENSE/);
 assert.match(license, /Version 3, 19 November 2007/);
 process.stdout.write('Release contract verified.\n');

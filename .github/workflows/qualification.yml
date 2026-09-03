@@ -1,0 +1,128 @@
+name: Qualify immutable candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Immutable GitHub release tag
+        required: true
+        type: string
+      image_digest:
+        description: Immutable GHCR sha256 digest
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Validate immutable candidate identity
+        id: candidate
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          IMAGE_DIGEST: ${{ inputs.image_digest }}
+        run: |
+          set -euo pipefail
+          [[ "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "${IMAGE_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]
+          readonly image="ghcr.io/info380/am-pilot-slicer-core@${IMAGE_DIGEST}"
+          readonly release_url="https://github.com/info380/AM-Pilot-Slicer-Core/releases/download/${RELEASE_TAG}"
+          mkdir -p "${RUNNER_TEMP}/release-evidence"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            "${release_url}/release-evidence.json" \
+            --output "${RUNNER_TEMP}/release-evidence/release-evidence.json"
+          jq -e \
+            --arg tag "${RELEASE_TAG}" \
+            --arg digest "${IMAGE_DIGEST}" \
+            '.semanticVersion == $tag and .imageDigest == $digest and .qualification.status == "candidate"' \
+            "${RUNNER_TEMP}/release-evidence/release-evidence.json" >/dev/null
+          echo "image=${image}" >> "${GITHUB_OUTPUT}"
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
+      - name: Verify digest signature identity
+        shell: bash
+        env:
+          IMAGE: ${{ steps.candidate.outputs.image }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          cosign verify \
+            --certificate-identity "https://github.com/info380/AM-Pilot-Slicer-Core/.github/workflows/release.yml@refs/tags/${RELEASE_TAG}" \
+            --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+            "${IMAGE}" > "${RUNNER_TEMP}/release-evidence/signature-verification.json"
+      - name: Pull exact candidate digest
+        env:
+          IMAGE: ${{ steps.candidate.outputs.image }}
+        run: docker pull "${IMAGE}"
+      - name: Run synthetic corpus under production resource boundaries
+        id: corpus
+        shell: bash
+        env:
+          IMAGE: ${{ steps.candidate.outputs.image }}
+          IMAGE_DIGEST: ${{ inputs.image_digest }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          readonly output_dir="${RUNNER_TEMP}/qualification-output"
+          mkdir -p "${output_dir}"
+          chmod 0777 "${output_dir}"
+          readonly container_id="$(docker create \
+            --platform linux/amd64 \
+            --network none \
+            --read-only \
+            --memory 512m \
+            --memory-swap 512m \
+            --cpus 0.5 \
+            --pids-limit 256 \
+            --security-opt no-new-privileges \
+            --cap-drop ALL \
+            --tmpfs /tmp:rw,nosuid,nodev,size=384m,mode=1777 \
+            --mount type=bind,source="${GITHUB_WORKSPACE}/qualification",target=/qualification,readonly \
+            --mount type=bind,source="${output_dir}",target=/qualification-output \
+            --env "QUALIFICATION_IMAGE_DIGEST=${IMAGE_DIGEST}" \
+            --env "QUALIFICATION_RELEASE_TAG=${RELEASE_TAG}" \
+            --env QUALIFICATION_OUTPUT_DIR=/qualification-output \
+            --entrypoint node \
+            "${IMAGE}" \
+            /qualification/run-corpus.mjs)"
+          trap 'docker rm -f "${container_id}" >/dev/null 2>&1 || true' EXIT
+          docker inspect "${container_id}" > "${output_dir}/container-inspect.json"
+          jq -e '
+            .[0].Config.User == "node" and
+            .[0].HostConfig.NetworkMode == "none" and
+            .[0].HostConfig.ReadonlyRootfs == true and
+            .[0].HostConfig.Memory == 536870912 and
+            .[0].HostConfig.MemorySwap == 536870912 and
+            .[0].HostConfig.NanoCpus == 500000000 and
+            .[0].HostConfig.PidsLimit == 256 and
+            (.[0].HostConfig.CapDrop | index("ALL") != null) and
+            (.[0].HostConfig.SecurityOpt | index("no-new-privileges") != null)
+          ' "${output_dir}/container-inspect.json" >/dev/null
+          docker start --attach "${container_id}"
+          jq -e '
+            .schema == "am-pilot-slicer-core-corpus-report" and
+            .version == 1 and
+            .status == "passed" and
+            .release.imageDigest == $digest and
+            .corpus.deterministicRepeat == true and
+            (.attempts | length) == 2 and
+            .attempts[0].checksumSha256 == .attempts[1].checksumSha256 and
+            .resources.cgroupMemoryPeakBytes <= 536870912
+          ' --arg digest "${IMAGE_DIGEST}" "${output_dir}/corpus-report.json" >/dev/null
+          sha256sum "${output_dir}"/* > "${output_dir}/SHA256SUMS"
+      - name: Upload qualification evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: slicer-core-qualification-${{ inputs.release_tag }}-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/qualification-output/
+            ${{ runner.temp }}/release-evidence/
+          if-no-files-found: error
+          retention-days: 90
