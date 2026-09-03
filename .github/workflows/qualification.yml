@@ -235,6 +235,7 @@ jobs:
           ' --arg digest "${IMAGE_DIGEST}" "${output_dir}/corpus-report.json" >/dev/null
           sha256sum "${output_dir}"/* > "${output_dir}/SHA256SUMS"
       - name: Upload qualification evidence
+        if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: slicer-core-qualification-${{ inputs.release_tag }}-${{ github.run_id }}
