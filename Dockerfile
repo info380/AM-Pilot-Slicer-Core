@@ -1,8 +1,9 @@
 # syntax=docker/dockerfile:1.7
 
 ARG DEBIAN_BUILD_IMAGE=debian:bookworm-20250811-slim@sha256:b1a741487078b369e78119849663d7f1a5341ef2768798f7b7406c4240f86aef
-ARG NODE_RUNTIME_IMAGE=node:22.20.0-bookworm-slim@sha256:b21fe589dfbe5cc39365d0544b9be3f1f33f55f3c86c87a76ff65a02f8f5848e
-ARG DEBIAN_SNAPSHOT=20250811T000000Z
+ARG NODE_RUNTIME_IMAGE=node:22.23.2-bookworm-slim@sha256:4d676821dff059fd00d277ee4261ef34ea712317fed0737c03941481b5760c96
+ARG DEBIAN_BUILD_SNAPSHOT=20250811T000000Z
+ARG DEBIAN_RUNTIME_SNAPSHOT=20260903T000000Z
 
 FROM ${DEBIAN_BUILD_IMAGE} AS prusa-build
 
@@ -10,7 +11,7 @@ ARG PRUSA_SLICER_COMMIT=f1776c0a6347bb84986d10eac8db1021f5bd8548
 ARG PRUSA_SLICER_SOURCE_SHA256=fe6c6696360c688f3ac6744964d5c27d98394da3e3cd00a8b8df7bc3fd4f7055
 ARG GMP_VERSION=6.2.1
 ARG GMP_SOURCE_SHA256=eae9326beb4158c386e39a356818031bd28f3124cf915f8c5b1dc4c7a36b4d7c
-ARG DEBIAN_SNAPSHOT
+ARG DEBIAN_BUILD_SNAPSHOT
 
 # Boost contains Unicode pathnames. Keep CMake/libarchive on Debian's built-in
 # UTF-8 locale so dependency extraction is deterministic on headless builders.
@@ -18,8 +19,8 @@ ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8
 
 RUN printf '%s\n' \
-      "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT} bookworm main" \
-      "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT} bookworm-security main" \
+      "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/${DEBIAN_BUILD_SNAPSHOT} bookworm main" \
+      "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/${DEBIAN_BUILD_SNAPSHOT} bookworm-security main" \
       > /etc/apt/sources.list \
     && rm -f /etc/apt/sources.list.d/debian.sources \
     && apt-get -o Acquire::Check-Valid-Until=false update \
@@ -99,13 +100,13 @@ RUN npm ci --ignore-scripts --omit=dev \
 
 FROM ${NODE_RUNTIME_IMAGE} AS runtime
 
-ARG DEBIAN_SNAPSHOT
+ARG DEBIAN_RUNTIME_SNAPSHOT
 
 LABEL org.opencontainers.image.title="AM Pilot Slicer Core Worker" \
       org.opencontainers.image.description="Headless PrusaSlicer worker for the AM Pilot Slicer protocol" \
       org.opencontainers.image.licenses="AGPL-3.0-only" \
       org.opencontainers.image.source="https://github.com/info380/AM-Pilot-Slicer-Core" \
-      org.opencontainers.image.version="0.1.7" \
+      org.opencontainers.image.version="0.1.8" \
       org.opencontainers.image.prusaslicer.version="2.9.3" \
       org.opencontainers.image.prusaslicer.revision="f1776c0a6347bb84986d10eac8db1021f5bd8548"
 
@@ -115,16 +116,28 @@ ENV NODE_ENV=production \
     SLICER_WORK_ROOT=/tmp/am-pilot-slicer-worker
 
 # The headless Prusa binary still links Debian's libpng dynamically. Install
-# that explicit runtime package from the same immutable Debian snapshot used by
-# the builder, retaining package metadata for the SBOM and vulnerability scan.
+# the exact runtime and security packages from an immutable Debian snapshot,
+# retaining package metadata for the SBOM and vulnerability scan.
 RUN printf '%s\n' \
-      "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/${DEBIAN_SNAPSHOT} bookworm main" \
-      "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/${DEBIAN_SNAPSHOT} bookworm-security main" \
+      "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/${DEBIAN_RUNTIME_SNAPSHOT} bookworm main" \
+      "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/${DEBIAN_RUNTIME_SNAPSHOT} bookworm-security main" \
       > /etc/apt/sources.list \
     && rm -f /etc/apt/sources.list.d/debian.sources \
     && apt-get -o Acquire::Check-Valid-Until=false update \
-    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libpng16-16 \
-    && rm -rf /var/lib/apt/lists/*
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      libgnutls30=3.7.9-2+deb12u7 \
+      libpng16-16=1.6.39-2+deb12u5 \
+    && rm -rf /var/lib/apt/lists/* \
+    && test -d /usr/local/lib/node_modules/npm \
+    && test -d /opt/yarn-v1.22.22 \
+    && rm -rf /usr/local/lib/node_modules /opt/yarn-v1.22.22 \
+    && rm -f \
+      /usr/local/bin/corepack \
+      /usr/local/bin/npm \
+      /usr/local/bin/npx \
+      /usr/local/bin/yarn \
+      /usr/local/bin/yarnpkg \
+    && test ! -e /usr/local/lib/node_modules/npm
 
 COPY --from=prusa-build /opt/prusa /opt/prusa
 WORKDIR /worker
