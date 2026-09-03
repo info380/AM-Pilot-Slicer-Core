@@ -28,7 +28,6 @@ const sleep = async (milliseconds, signal) => await new Promise((resolve, reject
     return;
   }
   const timer = setTimeout(resolve, milliseconds);
-  timer.unref?.();
   signal?.addEventListener('abort', () => {
     clearTimeout(timer);
     reject(signal.reason || new Error('Aborted'));
