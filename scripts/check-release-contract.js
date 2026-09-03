@@ -32,6 +32,8 @@ assert.match(dockerfile, /libgnutls30=3\.7\.9-2\+deb12u7/);
 assert.match(dockerfile, /libpng16-16=1\.6\.39-2\+deb12u5/);
 assert.match(dockerfile, /rm -rf \/usr\/local\/lib\/node_modules \/opt\/yarn-v1\.22\.22/);
 assert.match(dockerfile, /test ! -e \/usr\/local\/lib\/node_modules\/npm/);
+assert.match(dockerfile, /USER node\nRUN node --input-type=module --eval/);
+assert.match(dockerfile, /verifyPrusaSlicer/);
 assert.match(dockerfile, /https:\/\/ftp\.gnu\.org\/gnu\/gmp/);
 assert.match(dockerfile, new RegExp(GMP_SOURCE_SHA256));
 assert.match(sourceBundle, new RegExp(`gmp_version='${GMP_VERSION.replaceAll('.', '\\.')}'`));

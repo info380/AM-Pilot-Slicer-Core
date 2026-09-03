@@ -22,6 +22,11 @@ export const runProcess = async ({
     reject(new WorkerError('Slicing was cancelled.', { code: 'slicer_worker_cancelled' }));
     return;
   }
+  // The published PrusaSlicer binary resolves its checksum-locked dependency
+  // closure through the image's loader path. Preserve only that loader setting
+  // instead of forwarding process.env, which would expose the worker control
+  // token and other service secrets to the slicer subprocess.
+  const dynamicLibraryPath = String(process.env.LD_LIBRARY_PATH || '').trim();
   const child = spawn(command, args, {
     cwd,
     shell: false,
@@ -32,7 +37,8 @@ export const runProcess = async ({
       TMPDIR: cwd,
       LANG: 'C.UTF-8',
       LC_ALL: 'C.UTF-8',
-      TZ: 'UTC'
+      TZ: 'UTC',
+      ...(dynamicLibraryPath ? { LD_LIBRARY_PATH: dynamicLibraryPath } : {})
     }
   });
   let stdout = '';
