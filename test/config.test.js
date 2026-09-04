@@ -57,14 +57,20 @@ test('requires an explicit private proxy origin when proxy enforcement is enable
 
 test('serializes the canonical Prusa config deterministically', () => {
   assert.equal(serializePrusaConfig({
+    custom_parameters_printer: '',
+    end_filament_gcode: '',
     start_gcode: 'G28\r\nM117 Ready',
+    start_filament_gcode: '',
     layer_height: 0.2,
     cooling: true,
     nozzle_diameter: [0.4]
   }), [
     'cooling = 1',
+    'custom_parameters_printer = ',
+    'end_filament_gcode = ""',
     'layer_height = 0.2',
     'nozzle_diameter = 0.4',
+    'start_filament_gcode = ""',
     'start_gcode = G28\\nM117 Ready',
     ''
   ].join('\n'));

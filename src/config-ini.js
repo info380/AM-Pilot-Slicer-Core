@@ -8,16 +8,27 @@ const FORBIDDEN_KEYS = new Set([
   'compatible_prints_condition'
 ]);
 
-const encodeValue = value => {
+const QUOTED_EMPTY_STRING_KEYS = new Set([
+  'end_filament_gcode',
+  'start_filament_gcode'
+]);
+
+const encodeValue = (value, key) => {
   if (typeof value === 'boolean') return value ? '1' : '0';
-  if (Array.isArray(value)) return value.map(encodeValue).join(',');
+  if (Array.isArray(value)) return value.map(item => encodeValue(item, key)).join(',');
   if (value === null || value === undefined) return '';
   if (typeof value === 'object') {
     throw new WorkerError('PrusaSlicer configuration values must be scalar or arrays.', {
       code: 'slicer_effective_configuration_invalid'
     });
   }
-  return String(value).replace(/\r\n?/g, '\n').replace(/\n/g, '\\n');
+  const stringValue = String(value);
+  // PrusaSlicer's headless static Linux build may interpret a bare empty
+  // coString/coStrings value as uninitialized bytes during custom G-code
+  // processing. Its native INI representation for an intentional empty
+  // string is a quoted empty value.
+  if (stringValue === '' && QUOTED_EMPTY_STRING_KEYS.has(key)) return '""';
+  return stringValue.replace(/\r\n?/g, '\n').replace(/\n/g, '\\n');
 };
 
 export const serializePrusaConfig = value => {
@@ -44,5 +55,5 @@ export const serializePrusaConfig = value => {
       });
     }
   }
-  return `${entries.map(([key, setting]) => `${key} = ${encodeValue(setting)}`).join('\n')}\n`;
+  return `${entries.map(([key, setting]) => `${key} = ${encodeValue(setting, key)}`).join('\n')}\n`;
 };
