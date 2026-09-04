@@ -9,6 +9,7 @@ import { writeResultManifest } from 'file:///worker/src/manifest.js';
 import { materializePlateInputs } from 'file:///worker/src/plate.js';
 import { runProcess } from 'file:///worker/src/process.js';
 import { buildTransformed3mf } from 'file:///worker/src/three-mf.js';
+import { compileProductionToolpath } from 'file:///worker/src/toolpath.js';
 import { IDENTITY_3MF_TRANSFORM } from 'file:///worker/src/transform.js';
 import { WorkerError } from 'file:///worker/src/errors.js';
 import { downloadModelWithRetry } from 'file:///worker/src/worker.js';
@@ -255,6 +256,50 @@ await expectFailure({
   })
 });
 
+const toolpathLimitRoot = path.join(WORK_ROOT, 'toolpath-output-limit');
+await fs.mkdir(toolpathLimitRoot, { recursive: true, mode: 0o700 });
+const toolpathLimitGcode = `;LAYER_CHANGE
+;Z:0.2
+;HEIGHT:0.2
+;TYPE:Perimeter
+;WIDTH:0.45
+G90
+M83
+G1 X100 Y100 Z0.2 F6000
+G1 X101 Y100 E1 F1200
+`;
+const toolpathLimitGcodePath = path.join(toolpathLimitRoot, 'output.gcode');
+await fs.writeFile(toolpathLimitGcodePath, toolpathLimitGcode, { mode: 0o600 });
+await expectFailure({
+  name: 'toolpath-output-limit',
+  expectedCode: 'slicer_toolpath_size_invalid',
+  execute: async () => compileProductionToolpath({
+    gcodePath: toolpathLimitGcodePath,
+    workDir: toolpathLimitRoot,
+    run: {
+      id: 'failure-corpus-run',
+      inputFingerprint: `sha256:${'a'.repeat(64)}`,
+      engineKey: config.engineKey,
+      engineVersionId: 'failure-corpus-engine',
+      engineImageDigest: IMAGE_DIGEST,
+      capabilityRevisionId: 'fdm-prusa-2.9.3-protocol1-r2',
+      effectiveConfigurationChecksumSha256: 'b'.repeat(64)
+    },
+    effectiveConfiguration: {
+      coordinateMapping: {
+        projectOrigin: 'center',
+        engineBedOrigin: 'front_left',
+        translationMm: { x: 100, y: 100, z: 0 }
+      },
+      prusaConfig: { filament_diameter: 1.75 }
+    },
+    gcodeArtifact: { checksumSha256: createHash('sha256').update(toolpathLimitGcode).digest('hex') },
+    sliceEvidenceChecksumSha256: 'c'.repeat(64),
+    summary: { layerCount: 1 },
+    maximumBytes: 32
+  })
+});
+
 assert.deepEqual(results.map(result => result.name), [
   'malformed-stl-normalization',
   'malformed-3mf-package',
@@ -264,7 +309,8 @@ assert.deepEqual(results.map(result => result.name), [
   'process-timeout',
   'transient-download-retry',
   'gcode-output-limit',
-  'manifest-output-limit'
+  'manifest-output-limit',
+  'toolpath-output-limit'
 ]);
 
 const report = Object.freeze({

@@ -14,7 +14,7 @@ credentials remain in the private AM Pilot platform.
 
 - Engine key: `fdm.am_pilot_prusa_core`
 - Worker protocol: `1`
-- Capability revision: `fdm-prusa-2.9.3-protocol1-r1`
+- Capability revision: `fdm-prusa-2.9.3-protocol1-r2`
 - PrusaSlicer: `2.9.3`
 - Upstream commit: `f1776c0a6347bb84986d10eac8db1021f5bd8548`
 - Upstream source archive SHA-256:
@@ -39,8 +39,9 @@ print qualification all match.
    geometry-only 3MF package.
 5. PrusaSlicer slices the complete plate with auto-arrangement disabled and
    the canonical effective configuration. Post-processing is forcibly empty.
-6. The worker hashes the G-code, builds the versioned result manifest, and
-   streams both back to the API. The worker never receives tenant IDs, bucket
+6. The worker hashes the G-code, compiles a versioned AM Pilot production
+   toolpath artifact in center-origin coordinates, builds the result manifest,
+   and streams all three outputs back to the API. The worker never receives tenant IDs, bucket
    credentials, or storage keys.
 7. The API validates and stores immutable evidence and reconciles it into the
    existing Production File, Build, Job Card, and Fleet workflows.
@@ -108,6 +109,7 @@ enough for every customer model.
 | `SLICER_MAX_PLATE_INPUT_BYTES` | 201326592 |
 | `SLICER_MAX_GCODE_BYTES` | 67108864 |
 | `SLICER_MAX_MANIFEST_BYTES` | 1048576 |
+| `SLICER_MAX_TOOLPATH_PREVIEW_BYTES` | 268435456 |
 | `SLICER_MAX_MODELS_PER_RUN` | 8 |
 | `SLICER_MAX_OBJECTS_PER_PLATE` | 32 |
 

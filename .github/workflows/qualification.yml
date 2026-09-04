@@ -231,6 +231,9 @@ jobs:
             .corpus.deterministicRepeat == true and
             (.attempts | length) == 2 and
             .attempts[0].checksumSha256 == .attempts[1].checksumSha256 and
+            .attempts[0].toolpathChecksumSha256 == .attempts[1].toolpathChecksumSha256 and
+            .attempts[0].toolpathRecordCount > 0 and
+            .attempts[0].toolpathLayerCount == .attempts[0].metrics.layerCount and
             .resources.cgroupMemoryPeakBytes <= 536870912
           ' --arg digest "${IMAGE_DIGEST}" "${output_dir}/corpus-report.json" >/dev/null
           (cd "${output_dir}" && sha256sum ./* > SHA256SUMS)
@@ -286,7 +289,7 @@ jobs:
             .release.imageDigest == $digest and
             .corpus.source == "synthetic-non-customer" and
             .corpus.networkRequired == false and
-            (.cases | length) == 9 and
+            (.cases | length) == 10 and
             ([.cases[].status] | all(. == "passed"))
           ' --arg digest "${IMAGE_DIGEST}" "${output_dir}/failure-corpus-report.json" >/dev/null
           (cd "${output_dir}" && sha256sum ./* > SHA256SUMS)

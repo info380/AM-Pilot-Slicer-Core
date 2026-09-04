@@ -14,6 +14,7 @@ export const GMP_SOURCE_SHA256 = 'eae9326beb4158c386e39a356818031bd28f3124cf915f
 
 export const GCODE_CONTENT_TYPE = 'text/x.gcode';
 export const MANIFEST_CONTENT_TYPE = 'application/vnd.am-pilot.slicer-result+json';
+export const PRODUCTION_TOOLPATH_CONTENT_TYPE = 'application/vnd.am-pilot.production-toolpath';
 
 export const DEFAULTS = Object.freeze({
   pollIntervalMs: 3_000,
@@ -27,6 +28,7 @@ export const DEFAULTS = Object.freeze({
   maximumPlateInputBytes: 201_326_592,
   maximumGcodeBytes: 67_108_864,
   maximumManifestBytes: 1_048_576,
+  maximumToolpathPreviewBytes: 268_435_456,
   maximumObjectsPerPlate: 32,
   maximumModelsPerRun: 8,
   maximumLogBytes: 262_144,

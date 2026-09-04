@@ -10,8 +10,13 @@ import {
 } from './constants.js';
 import { boundedFailureMessage, asWorkerError, WorkerError } from './errors.js';
 import { verifyPrusaSlicer, runSlicerEngine } from './engine.js';
-import { buildResultManifest, writeResultManifest } from './manifest.js';
+import {
+  buildResultManifest,
+  buildSliceEvidenceChecksum,
+  writeResultManifest
+} from './manifest.js';
 import { materializePlateInputs } from './plate.js';
+import { compileProductionToolpath } from './toolpath.js';
 
 const LEASE_TERMINAL_CODES = new Set([
   'slicer_worker_lease_conflict',
@@ -132,11 +137,20 @@ export const downloadModelWithRetry = async ({
   });
 };
 
-const completeWithRetry = async ({ api, run, leaseToken, gcodePath, manifestPath, signal, config }) => {
+const completeWithRetry = async ({
+  api,
+  run,
+  leaseToken,
+  gcodePath,
+  manifestPath,
+  toolpathPreviewPath,
+  signal,
+  config
+}) => {
   let delayMs = 1_000;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
-      return await api.complete({ run, leaseToken, gcodePath, manifestPath, signal });
+      return await api.complete({ run, leaseToken, gcodePath, manifestPath, toolpathPreviewPath, signal });
     } catch (error) {
       if (!error.retryable || attempt === 3) throw error;
       await sleep(delayMs, signal);
@@ -145,6 +159,27 @@ const completeWithRetry = async ({ api, run, leaseToken, gcodePath, manifestPath
   }
   throw new WorkerError('Slicer result upload retry budget was exhausted.', {
     code: 'slicer_worker_completion_failed'
+  });
+};
+
+const configurationMetric = value => {
+  const candidate = Array.isArray(value) ? value[0] : value;
+  const numeric = Number(candidate);
+  return Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
+};
+
+const enrichResultMetrics = (metrics, effectiveConfiguration) => {
+  const prusaConfig = effectiveConfiguration?.prusaConfig || {};
+  const temperatureMetrics = {
+    nozzleFirstLayerC: configurationMetric(prusaConfig.first_layer_temperature),
+    nozzleOtherLayersC: configurationMetric(prusaConfig.temperature),
+    bedFirstLayerC: configurationMetric(prusaConfig.first_layer_bed_temperature),
+    bedOtherLayersC: configurationMetric(prusaConfig.bed_temperature),
+    chamberNominalC: configurationMetric(prusaConfig.chamber_temperature)
+  };
+  return Object.freeze({
+    ...metrics,
+    ...Object.fromEntries(Object.entries(temperatureMetrics).filter(([, value]) => value !== null))
   });
 };
 
@@ -217,7 +252,7 @@ const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal }) => {
       signal: jobSignal,
       onProgress: sendProgress
     });
-    const result = await runSlicerEngine({
+    const rawResult = await runSlicerEngine({
       plateInputPaths,
       effectiveConfiguration,
       workDir,
@@ -225,7 +260,34 @@ const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal }) => {
       signal: jobSignal,
       onProgress: sendProgress
     });
-    const manifest = buildResultManifest({ run, engine: claim.engine, result });
+    const result = Object.freeze({
+      ...rawResult,
+      metrics: enrichResultMetrics(rawResult.metrics, effectiveConfiguration)
+    });
+    await sendProgress({
+      stage: 'compiling-preview',
+      progressPercent: 90,
+      message: 'Compiling the immutable AM Pilot production toolpath.'
+    });
+    const sliceEvidenceChecksumSha256 = buildSliceEvidenceChecksum({ run, result });
+    const toolpathPreview = await compileProductionToolpath({
+      gcodePath: result.gcodePath,
+      workDir,
+      run,
+      effectiveConfiguration,
+      gcodeArtifact: result.artifact,
+      sliceEvidenceChecksumSha256,
+      summary: result.metrics,
+      warnings: result.warnings,
+      maximumBytes: config.maximumToolpathPreviewBytes
+    });
+    const manifest = buildResultManifest({
+      run,
+      engine: claim.engine,
+      result,
+      toolpathPreview: toolpathPreview.artifact,
+      sliceEvidenceChecksumSha256
+    });
     const manifestPath = await writeResultManifest({
       workDir,
       manifest,
@@ -242,6 +304,7 @@ const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal }) => {
       leaseToken: lease.token,
       gcodePath: result.gcodePath,
       manifestPath,
+      toolpathPreviewPath: toolpathPreview.path,
       signal: jobSignal,
       config
     });
