@@ -1,7 +1,7 @@
 {
   "schema": "am-pilot-slicer-core-capabilities",
   "version": 1,
-  "capabilityRevisionId": "fdm-prusa-2.9.3-protocol1-r1",
+  "capabilityRevisionId": "fdm-prusa-2.9.3-protocol1-r2",
   "engineKey": "fdm.am_pilot_prusa_core",
   "workerProtocolVersion": 1,
   "engine": {
@@ -11,7 +11,7 @@
   },
   "processFamilies": ["fdm"],
   "inputFormats": ["stl", "3mf"],
-  "outputFormats": ["gcode", "result-manifest"],
+  "outputFormats": ["gcode", "result-manifest", "production-toolpath"],
   "plate": {
     "preservesPlacement": true,
     "autoArrange": false,
@@ -22,6 +22,6 @@
   "execution": {
     "concurrency": 1,
     "postProcessingScripts": false,
-    "toolpathPreviewArtifact": false
+    "toolpathPreviewArtifact": true
   }
 }

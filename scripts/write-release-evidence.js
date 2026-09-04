@@ -29,7 +29,7 @@ const evidence = {
   semanticVersion: process.env.GITHUB_REF_NAME || 'unversioned',
   imageDigest: digest,
   workerProtocolVersion: WORKER_PROTOCOL_VERSION,
-  capabilityRevisionId: 'fdm-prusa-2.9.3-protocol1-r1',
+  capabilityRevisionId: 'fdm-prusa-2.9.3-protocol1-r2',
   source: {
     repository: process.env.GITHUB_SERVER_URL && process.env.GITHUB_REPOSITORY
       ? `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}`

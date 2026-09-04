@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -8,8 +9,43 @@ import {
 } from './constants.js';
 import { WorkerError } from './errors.js';
 
-export const buildResultManifest = ({ run, engine, result }) => {
-  if (!run?.id || !run?.inputFingerprint || !result?.artifact) {
+const stableJson = value => {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+};
+
+export const buildSliceEvidenceChecksum = ({ run, result }) => {
+  if (!run?.id || !result?.artifact) {
+    throw new WorkerError('Slice evidence inputs are incomplete.', { code: 'slicer_result_manifest_invalid' });
+  }
+  return createHash('sha256').update(stableJson({
+    runId: run.id,
+    inputFingerprint: run.inputFingerprint,
+    engine: {
+      key: run.engineKey,
+      versionId: run.engineVersionId,
+      imageDigest: run.engineImageDigest,
+      capabilityRevisionId: run.capabilityRevisionId,
+      workerProtocolVersion: WORKER_PROTOCOL_VERSION
+    },
+    effectiveConfigurationChecksumSha256: run.effectiveConfigurationChecksumSha256,
+    gcode: result.artifact,
+    metrics: result.metrics,
+    warnings: result.warnings
+  })).digest('hex');
+};
+
+export const buildResultManifest = ({ run, engine, result, toolpathPreview, sliceEvidenceChecksumSha256 }) => {
+  if (
+    !run?.id
+    || !run?.inputFingerprint
+    || !result?.artifact
+    || !toolpathPreview
+    || !/^[0-9a-f]{64}$/.test(String(sliceEvidenceChecksumSha256 || ''))
+  ) {
     throw new WorkerError('Result manifest inputs are incomplete.', { code: 'slicer_result_manifest_invalid' });
   }
   return Object.freeze({
@@ -25,7 +61,11 @@ export const buildResultManifest = ({ run, engine, result }) => {
       workerProtocolVersion: WORKER_PROTOCOL_VERSION
     }),
     effectiveConfigurationChecksumSha256: run.effectiveConfigurationChecksumSha256,
-    outputs: Object.freeze({ gcode: result.artifact }),
+    sliceEvidenceChecksumSha256,
+    outputs: Object.freeze({
+      gcode: result.artifact,
+      toolpathPreview
+    }),
     metrics: result.metrics,
     warnings: result.warnings
   });

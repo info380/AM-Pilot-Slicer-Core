@@ -85,9 +85,11 @@ assert.equal(
   2
 );
 assert.match(qualificationCorpus, /file:\/\/\/worker\/src\/engine\.js/);
+assert.match(qualificationCorpus, /file:\/\/\/worker\/src\/toolpath\.js/);
 assert.match(qualificationCorpus, /AM_PILOT_QUALIFICATION_START/);
 assert.match(qualificationCorpus, /AM_PILOT_QUALIFICATION_END/);
 assert.match(qualificationCorpus, /deterministicRepeat: true/);
+assert.match(qualificationCorpus, /toolpathChecksumSha256/);
 assert.match(qualificationCorpus, /chmod\(evidencePath, 0o644\)/);
 assert.match(qualificationCorpus, /corpus-report\.json[\s\S]+mode: 0o644/);
 assert.match(qualificationFailureCorpus, /file:\/\/\/worker\/src\/api-client\.js/);
@@ -103,6 +105,7 @@ assert.match(qualificationFailureCorpus, /slicer_engine_timeout/);
 assert.match(qualificationFailureCorpus, /slicer_source_model_download_failed/);
 assert.match(qualificationFailureCorpus, /slicer_gcode_size_invalid/);
 assert.match(qualificationFailureCorpus, /slicer_result_manifest_size_invalid/);
+assert.match(qualificationFailureCorpus, /slicer_toolpath_size_invalid/);
 assert.match(qualificationFailureCorpus, /failure-corpus-report\.json/);
 assert.match(qualificationFailureCorpus, /chmod\(reportPath, 0o644\)/);
 assert.match(egressProxy, /slicer_egress_proxy_rejected/);

@@ -3,7 +3,11 @@ import { createReadStream } from 'node:fs';
 import fs from 'node:fs/promises';
 import { Readable } from 'node:stream';
 
-import { GCODE_CONTENT_TYPE, MANIFEST_CONTENT_TYPE } from './constants.js';
+import {
+  GCODE_CONTENT_TYPE,
+  MANIFEST_CONTENT_TYPE,
+  PRODUCTION_TOOLPATH_CONTENT_TYPE
+} from './constants.js';
 import { WorkerError } from './errors.js';
 
 const JSON_CONTENT_TYPE = 'application/json';
@@ -35,11 +39,19 @@ const safeFilename = (value, fallback) => {
   return result || fallback;
 };
 
-async function* multipartBody({ boundary, gcodePath, manifestPath, gcodeFilename }) {
-  const files = [
-    { field: 'gcode', path: gcodePath, filename: gcodeFilename, contentType: GCODE_CONTENT_TYPE },
-    { field: 'manifest', path: manifestPath, filename: 'manifest.json', contentType: MANIFEST_CONTENT_TYPE }
-  ];
+const completionFiles = ({ gcodePath, manifestPath, toolpathPreviewPath, gcodeFilename }) => [
+  { field: 'gcode', path: gcodePath, filename: gcodeFilename, contentType: GCODE_CONTENT_TYPE },
+  { field: 'manifest', path: manifestPath, filename: 'manifest.json', contentType: MANIFEST_CONTENT_TYPE },
+  {
+    field: 'toolpathPreview',
+    path: toolpathPreviewPath,
+    filename: 'toolpath.amptp',
+    contentType: PRODUCTION_TOOLPATH_CONTENT_TYPE
+  }
+];
+
+async function* multipartBody({ boundary, gcodePath, manifestPath, toolpathPreviewPath, gcodeFilename }) {
+  const files = completionFiles({ gcodePath, manifestPath, toolpathPreviewPath, gcodeFilename });
   for (const file of files) {
     yield Buffer.from(
       `--${boundary}\r\nContent-Disposition: form-data; name="${file.field}"; filename="${file.filename}"\r\n`
@@ -51,11 +63,8 @@ async function* multipartBody({ boundary, gcodePath, manifestPath, gcodeFilename
   yield Buffer.from(`--${boundary}--\r\n`);
 }
 
-const multipartLength = async ({ boundary, gcodePath, manifestPath, gcodeFilename }) => {
-  const files = [
-    { field: 'gcode', path: gcodePath, filename: gcodeFilename, contentType: GCODE_CONTENT_TYPE },
-    { field: 'manifest', path: manifestPath, filename: 'manifest.json', contentType: MANIFEST_CONTENT_TYPE }
-  ];
+const multipartLength = async ({ boundary, gcodePath, manifestPath, toolpathPreviewPath, gcodeFilename }) => {
+  const files = completionFiles({ gcodePath, manifestPath, toolpathPreviewPath, gcodeFilename });
   let length = Buffer.byteLength(`--${boundary}--\r\n`);
   for (const file of files) {
     const stat = await fs.stat(file.path);
@@ -232,10 +241,10 @@ export class SlicerWorkerApiClient {
     return targetPath;
   }
 
-  async complete({ run, leaseToken, gcodePath, manifestPath, signal = null }) {
+  async complete({ run, leaseToken, gcodePath, manifestPath, toolpathPreviewPath, signal = null }) {
     const boundary = `am-pilot-slicer-${crypto.randomUUID()}`;
     const gcodeFilename = safeFilename(run.plateName || run.plateId, 'slice') + '.gcode';
-    const length = await multipartLength({ boundary, gcodePath, manifestPath, gcodeFilename });
+    const length = await multipartLength({ boundary, gcodePath, manifestPath, toolpathPreviewPath, gcodeFilename });
     let response;
     try {
       response = await this.fetchImpl(this.url(`runs/${encodePath(run.id)}/complete`), {
@@ -245,7 +254,13 @@ export class SlicerWorkerApiClient {
           'Content-Type': `multipart/form-data; boundary=${boundary}`,
           'Content-Length': String(length)
         },
-        body: Readable.toWeb(Readable.from(multipartBody({ boundary, gcodePath, manifestPath, gcodeFilename }))),
+        body: Readable.toWeb(Readable.from(multipartBody({
+          boundary,
+          gcodePath,
+          manifestPath,
+          toolpathPreviewPath,
+          gcodeFilename
+        }))),
         duplex: 'half',
         signal: combineSignal(signal, this.config.jobTimeoutMs),
         redirect: 'error',

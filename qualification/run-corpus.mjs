@@ -4,8 +4,10 @@ import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { runSlicerEngine, verifyPrusaSlicer } from 'file:///worker/src/engine.js';
+import { buildSliceEvidenceChecksum } from 'file:///worker/src/manifest.js';
 import { materializePlateInputs } from 'file:///worker/src/plate.js';
 import { runProcess } from 'file:///worker/src/process.js';
+import { compileProductionToolpath } from 'file:///worker/src/toolpath.js';
 
 const REPORT_SCHEMA = 'am-pilot-slicer-core-corpus-report';
 const REPORT_VERSION = 1;
@@ -179,7 +181,18 @@ const engineConfig = Object.freeze({
   maximumModelsPerRun: 8,
   maximumObjectsPerPlate: 16,
   maximumGcodeBytes: 64 * 1024 * 1024,
+  maximumToolpathPreviewBytes: 256 * 1024 * 1024,
   engineThreads: 1
+});
+
+const runIdentity = Object.freeze({
+  id: 'qualification-run',
+  inputFingerprint: `sha256:${'a'.repeat(64)}`,
+  engineKey: 'fdm.am_pilot_prusa_core',
+  engineVersionId: 'qualification-engine',
+  engineImageDigest: IMAGE_DIGEST,
+  capabilityRevisionId: 'fdm-prusa-2.9.3-protocol1-r2',
+  effectiveConfigurationChecksumSha256: 'b'.repeat(64)
 });
 
 const effectiveConfiguration = Object.freeze({
@@ -324,14 +337,35 @@ try {
     if (!Number.isInteger(result.metrics.layerCount) || result.metrics.layerCount <= 0) {
       throw new Error('Generated G-code did not report a positive layer count.');
     }
+    const sliceEvidenceChecksumSha256 = buildSliceEvidenceChecksum({ run: runIdentity, result });
+    const toolpath = await compileProductionToolpath({
+      gcodePath: result.gcodePath,
+      workDir: runRoot,
+      run: runIdentity,
+      effectiveConfiguration,
+      gcodeArtifact: result.artifact,
+      sliceEvidenceChecksumSha256,
+      summary: result.metrics,
+      warnings: result.warnings,
+      maximumBytes: engineConfig.maximumToolpathPreviewBytes
+    });
     const evidencePath = path.join(OUTPUT_ROOT, `mixed-corpus-attempt-${attempt}.gcode`);
+    const toolpathEvidencePath = path.join(OUTPUT_ROOT, `mixed-corpus-attempt-${attempt}.amptp`);
     await fs.copyFile(result.gcodePath, evidencePath);
+    await fs.copyFile(toolpath.path, toolpathEvidencePath);
     await fs.chmod(evidencePath, 0o644);
+    await fs.chmod(toolpathEvidencePath, 0o644);
     attempts.push(Object.freeze({
       attempt,
       gcodeFile: path.basename(evidencePath),
       checksumSha256: await hashFile(evidencePath),
       sizeBytes: result.artifact.sizeBytes,
+      toolpathFile: path.basename(toolpathEvidencePath),
+      toolpathChecksumSha256: await hashFile(toolpathEvidencePath),
+      toolpathSizeBytes: toolpath.artifact.sizeBytes,
+      toolpathRecordCount: toolpath.header.recordCount,
+      toolpathLayerCount: toolpath.header.layerCount,
+      sliceEvidenceChecksumSha256,
       metrics: result.metrics,
       warningCount: result.warnings.length
     }));
@@ -343,6 +377,9 @@ try {
 
 if (attempts[0].checksumSha256 !== attempts[1].checksumSha256) {
   throw new Error('The repeated canonical corpus slice produced different G-code checksums.');
+}
+if (attempts[0].toolpathChecksumSha256 !== attempts[1].toolpathChecksumSha256) {
+  throw new Error('The repeated canonical corpus slice produced different production-toolpath checksums.');
 }
 
 const cgroupMemoryPeakBytes = Number(await readCgroupMetric('memory.peak'));
@@ -380,7 +417,8 @@ const report = Object.freeze({
     cpuUsageUsec: (await readCpuUsageUsec()) - cpuStartUsec,
     temporaryDiskPeakBytes: state.temporaryDiskPeakBytes,
     sourceBytes: (await fs.stat(stlPath)).size + (await fs.stat(threeMfPath)).size,
-    gcodeBytes: attempts[0].sizeBytes
+    gcodeBytes: attempts[0].sizeBytes,
+    toolpathBytes: attempts[0].toolpathSizeBytes
   }),
   attempts: Object.freeze(attempts)
 });

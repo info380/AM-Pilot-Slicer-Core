@@ -24,6 +24,7 @@ test('loads an immutable fail-closed worker identity', () => {
   assert.equal(config.maximumTotalNormalizedBytes, 134_217_728);
   assert.equal(config.maximumPlateInputBytes, 201_326_592);
   assert.equal(config.maximumGcodeBytes, 67_108_864);
+  assert.equal(config.maximumToolpathPreviewBytes, 268_435_456);
   assert.equal(config.maximumModelsPerRun, 8);
   assert.equal(config.maximumObjectsPerPlate, 32);
   assert.ok(Object.isFrozen(config));
@@ -31,6 +32,9 @@ test('loads an immutable fail-closed worker identity', () => {
     SLICER_MAX_MODEL_BYTES: '2097152',
     SLICER_MAX_TOTAL_MODEL_BYTES: '1048576'
   }), { allowInsecureLoopback: true }), /Aggregate Slicer byte limits/);
+  assert.throws(() => loadWorkerConfig(environment({
+    SLICER_MAX_TOOLPATH_PREVIEW_BYTES: '1048575'
+  }), { allowInsecureLoopback: true }), /SLICER_MAX_TOOLPATH_PREVIEW_BYTES/);
 });
 
 test('rejects insecure non-loopback API origins', () => {
