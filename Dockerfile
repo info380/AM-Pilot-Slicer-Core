@@ -3,7 +3,7 @@
 ARG DEBIAN_BUILD_IMAGE=debian:bookworm-20250811-slim@sha256:b1a741487078b369e78119849663d7f1a5341ef2768798f7b7406c4240f86aef
 ARG NODE_RUNTIME_IMAGE=node:22.23.2-bookworm-slim@sha256:4d676821dff059fd00d277ee4261ef34ea712317fed0737c03941481b5760c96
 ARG DEBIAN_BUILD_SNAPSHOT=20250811T000000Z
-ARG DEBIAN_RUNTIME_SNAPSHOT=20260903T000000Z
+ARG DEBIAN_RUNTIME_SNAPSHOT=20260904T094338Z
 
 FROM ${DEBIAN_BUILD_IMAGE} AS prusa-build
 
@@ -106,7 +106,7 @@ LABEL org.opencontainers.image.title="AM Pilot Slicer Core Worker" \
       org.opencontainers.image.description="Headless PrusaSlicer worker for the AM Pilot Slicer protocol" \
       org.opencontainers.image.licenses="AGPL-3.0-only" \
       org.opencontainers.image.source="https://github.com/info380/AM-Pilot-Slicer-Core" \
-      org.opencontainers.image.version="0.1.14" \
+      org.opencontainers.image.version="0.1.15" \
       org.opencontainers.image.prusaslicer.version="2.9.3" \
       org.opencontainers.image.prusaslicer.revision="f1776c0a6347bb84986d10eac8db1021f5bd8548"
 
@@ -126,6 +126,7 @@ RUN printf '%s\n' \
     && apt-get -o Acquire::Check-Valid-Until=false update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       libgnutls30=3.7.9-2+deb12u7 \
+      libpcre2-8-0=10.42-1+deb12u1 \
       libpng16-16=1.6.39-2+deb12u5 \
     && rm -rf /var/lib/apt/lists/* \
     && test -d /usr/local/lib/node_modules/npm \
