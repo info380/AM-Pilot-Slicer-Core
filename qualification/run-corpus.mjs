@@ -210,6 +210,8 @@ const effectiveConfiguration = Object.freeze({
     temperature: 235,
     first_layer_bed_temperature: 100,
     bed_temperature: 95,
+    start_filament_gcode: '',
+    end_filament_gcode: '',
     start_gcode: '; AM_PILOT_QUALIFICATION_START\nG90\nM82',
     end_gcode: '; AM_PILOT_QUALIFICATION_END\nM104 S0\nM140 S0'
   })
