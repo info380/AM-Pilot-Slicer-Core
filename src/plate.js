@@ -5,6 +5,7 @@ import { WorkerError } from './errors.js';
 import { runProcess } from './process.js';
 import { buildTransformed3mf } from './three-mf.js';
 import { buildPlateObjectTransform } from './transform.js';
+import { buildSupportPainted3mf, assertSupportPaintRoundtrip } from './support-paint.js';
 
 const safeSegment = (value, fallback) => {
   const normalized = String(value || '').replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80);
@@ -98,7 +99,7 @@ export const materializePlateInputs = async ({
   let totalPlateInputBytes = 0;
   for (let index = 0; index < objects.length; index += 1) {
     const object = objects[index];
-    const source = sourceByProjectFileId.get(object.fileId);
+    let source = sourceByProjectFileId.get(object.fileId);
     if (!source) {
       throw new WorkerError('A plate object references an unavailable project file.', {
         code: 'slicer_source_model_missing'
@@ -106,6 +107,24 @@ export const materializePlateInputs = async ({
     }
     if (object.placement?.status !== 'placed') {
       throw new WorkerError('A plate object has not been placed.', { code: 'slicer_placement_incomplete' });
+    }
+    if (object.supportPaint != null) {
+      const model = models.find(entry => entry.projectFileId === object.fileId);
+      const annotatedPath = path.join(workDir, `paint-source-${index}.3mf`);
+      const normalizedPath = path.join(workDir, `paint-normalized-${index}.3mf`);
+      const annotated = buildSupportPainted3mf({
+        source: await fs.readFile(downloadedModels.get(model.modelId)), model,
+        paint: object.supportPaint, maximumUncompressedBytes: config.maximumNormalizedModelBytes
+      });
+      await fs.writeFile(annotatedPath, annotated, { mode: 0o600 });
+      await normalizeSourceTo3mf({ sourcePath: annotatedPath, outputPath: normalizedPath, config, signal });
+      const size = (await fs.stat(normalizedPath)).size;
+      totalNormalizedBytes += size;
+      if (size > config.maximumNormalizedModelBytes || totalNormalizedBytes > config.maximumTotalNormalizedBytes) {
+        throw new WorkerError('Painted geometry exceeds qualified normalization limits.', { code: 'slicer_normalized_model_size_exceeded' });
+      }
+      source = await fs.readFile(normalizedPath);
+      assertSupportPaintRoundtrip({ before: annotated, after: source, maximumUncompressedBytes: config.maximumNormalizedModelBytes });
     }
     const objectTransform = buildPlateObjectTransform({
       transform: object.transform,

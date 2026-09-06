@@ -82,8 +82,11 @@ assert.match(qualification, /am-pilot-slicer-core-failure-corpus-report/);
 assert.match(qualification, /failure-qualification-output/);
 assert.equal(
   qualification.match(/\(cd "\$\{output_dir\}" && sha256sum \.\/\* > SHA256SUMS\)/g)?.length,
-  2
+  3
 );
+assert.match(qualification, /PRUSA_SLICER_INTEGRATION_CMD=\/opt\/prusa\/bin\/prusa-slicer/);
+assert.match(qualification, /support-paint-qualification/);
+assert.match(qualification, /# skipped 0/);
 assert.match(qualificationCorpus, /file:\/\/\/worker\/src\/engine\.js/);
 assert.match(qualificationCorpus, /file:\/\/\/worker\/src\/toolpath\.js/);
 assert.match(qualificationCorpus, /AM_PILOT_QUALIFICATION_START/);
