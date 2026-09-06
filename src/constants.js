@@ -1,5 +1,7 @@
 export const ENGINE_KEY = 'fdm.am_pilot_prusa_core';
 export const WORKER_PROTOCOL_VERSION = 1;
+export const SUPPORT_PAINT_CAPABILITY = 'fdm-prusa-2.9.3-protocol1-r3';
+export const CAPABILITY_REVISION_ID = SUPPORT_PAINT_CAPABILITY;
 export const RESULT_MANIFEST_SCHEMA = 'am-pilot-slicer-result-manifest';
 export const RESULT_MANIFEST_VERSION = 1;
 export const INPUT_SNAPSHOT_SCHEMA = 'am-pilot-slicer-input-snapshot';

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 
 import {
+  CAPABILITY_REVISION_ID,
   ENGINE_KEY,
   GMP_SOURCE_SHA256,
   GMP_VERSION,
@@ -29,7 +30,7 @@ const evidence = {
   semanticVersion: process.env.GITHUB_REF_NAME || 'unversioned',
   imageDigest: digest,
   workerProtocolVersion: WORKER_PROTOCOL_VERSION,
-  capabilityRevisionId: 'fdm-prusa-2.9.3-protocol1-r2',
+  capabilityRevisionId: CAPABILITY_REVISION_ID,
   source: {
     repository: process.env.GITHUB_SERVER_URL && process.env.GITHUB_REPOSITORY
       ? `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}`

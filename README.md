@@ -14,7 +14,7 @@ credentials remain in the private AM Pilot platform.
 
 - Engine key: `fdm.am_pilot_prusa_core`
 - Worker protocol: `1`
-- Capability revision: `fdm-prusa-2.9.3-protocol1-r2`
+- Capability revision: `fdm-prusa-2.9.3-protocol1-r3`
 - PrusaSlicer: `2.9.3`
 - Upstream commit: `f1776c0a6347bb84986d10eac8db1021f5bd8548`
 - Upstream source archive SHA-256:
@@ -145,7 +145,14 @@ assets as well as short-lived workflow artifacts.
 See [SOURCE_OFFER.md](SOURCE_OFFER.md) and
 [docs/qualification.md](docs/qualification.md).
 
-## Support painting candidate (v0.3.0)
+## Support painting candidate (v0.3.1)
+
+The immutable v0.3.0 release is rejected for activation: its generated release
+evidence incorrectly advertised capability r2 instead of the worker's r3 support
+painting contract. Its tag and assets remain unchanged. The v0.3.1 replacement
+uses the worker's canonical capability definition for release evidence and checks
+that identity before qualification. It requires its own signed image and complete
+qualification evidence; no v0.3.0 result grants v0.3.1 approval.
 
 Capability `fdm-prusa-2.9.3-protocol1-r3` admits version-1 source-bound support
 annotations on STL objects. The API snapshot retains the original STL SHA-256,
