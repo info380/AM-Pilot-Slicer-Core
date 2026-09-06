@@ -65,6 +65,45 @@ test('ASCII facets use float32 source coordinates and invalid source geometry fa
   assert.throws(() => readPaintableStl(broken));
 });
 
+test('native float32 recentering is exact in local coordinates without relaxing geometry or paint checks', () => {
+  const shifted=Buffer.from(source);
+  for(let face=0;face<facets.length;face++)for(let coord=0;coord<9;coord++){
+    const offset=84+face*50+12+coord*4;
+    shifted.writeFloatLE(shifted.readFloatLE(offset)+[0.0248918533,0,0.2698773146][coord%3],offset);
+  }
+  const sha=createHash('sha256').update(shifted).digest('hex');
+  const before=buildSupportPainted3mf({source:shifted,model:{...model,checksumSha256:sha},paint:{...paint('0:40003\n1:8'),sourceSha256:sha},maximumUncompressedBytes:1_000_000});
+  const positions=readPaintableStl(shifted),lo=[Infinity,Infinity,Infinity],hi=[-Infinity,-Infinity,-Infinity];
+  positions.forEach((v,i)=>{lo[i%3]=Math.min(lo[i%3],v);hi[i%3]=Math.max(hi[i%3],v);});
+  const center=lo.map((v,i)=>(v+hi[i])/2);
+  const normalized=xml(before).replace(/<vertex x="([^"]+)" y="([^"]+)" z="([^"]+)"\/>/g,(_m,...args)=>{
+    const v=args.slice(0,3).map((v,i)=>Math.fround(Number(v)-Math.fround(center[i])));
+    return `<vertex x="${v[0].toPrecision(9)}" y="${v[1].toPrecision(9)}" z="${v[2].toPrecision(9)}"/>`;
+  }).replace('<item objectid="1"/>',`<item objectid="1" transform="1 0 0 0 1 0 0 0 1 ${center.map(v=>Number(v.toPrecision(9))).join(' ')}"/>`);
+  const archive=text=>{const entries=unzipSync(before);entries['3D/3dmodel.model']=strToU8(text);return zipSync(entries);};
+  const check=text=>assertSupportPaintRoundtrip({before,after:archive(text),maximumUncompressedBytes:1_000_000});
+  assert.doesNotThrow(()=>check(normalized));
+  for(const text of [normalized.replace('40003','80003'),normalized.replace('v1="0" v2="1"','v1="1" v2="0"'),
+    normalized.replace(/x="[^"]+"/,'x="-5.00001"'),normalized.replace('transform="1 0','transform="2 0'),
+    normalized.replace(/<triangle [^>]+\/>/,'')]) assert.throws(()=>check(text),{code:'slicer_support_paint_invalid'});
+});
+
+test('native normalization preserves an off-origin fractional mesh and partial paint', { skip: !process.env.PRUSA_SLICER_INTEGRATION_CMD }, async t => {
+  const command=process.env.PRUSA_SLICER_INTEGRATION_CMD;
+  const workDir=await fs.mkdtemp(path.join(os.tmpdir(),'support-paint-recenter-'));
+  t.after(()=>fs.rm(workDir,{recursive:true,force:true}));
+  const shifted=Buffer.from(source);
+  for(let face=0;face<facets.length;face++)for(let coord=0;coord<9;coord++){
+    const offset=84+face*50+12+coord*4;
+    shifted.writeFloatLE(shifted.readFloatLE(offset)+[0.0248918533,0,0.2698773146][coord%3],offset);
+  }
+  const checksumSha256=createHash('sha256').update(shifted).digest('hex');
+  const before=buildSupportPainted3mf({source:shifted,model:{...model,checksumSha256},paint:{...paint('0:40003\n1:8'),sourceSha256:checksumSha256},maximumUncompressedBytes:1_000_000});
+  const input=path.join(workDir,'before.3mf'),output=path.join(workDir,'after.3mf');await fs.writeFile(input,before);
+  await runProcess({command,args:['--export-3mf','--dont-arrange','--no-ensure-on-bed','--config-compatibility','disable','--output',output,input],cwd:workDir,timeoutMs:120000,maximumLogBytes:262144});
+  assertSupportPaintRoundtrip({before,after:await fs.readFile(output),maximumUncompressedBytes:1_000_000});
+});
+
 test('native worker normalization preserves paint and changes generated support paths', { skip: !process.env.PRUSA_SLICER_INTEGRATION_CMD }, async t => {
   const command = process.env.PRUSA_SLICER_INTEGRATION_CMD;
   const workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'support-paint-engine-'));

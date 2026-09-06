@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { zipSync, strToU8 } from 'fflate';
 import { WorkerError } from './errors.js';
 import { readNormalized3mfXml } from './three-mf.js';
-import { apply3mfTransform, parse3mfTransform } from './transform.js';
+import { IDENTITY_3MF_TRANSFORM, parse3mfTransform } from './transform.js';
 
 export { SUPPORT_PAINT_CAPABILITY } from './constants.js';
 const limits = Object.freeze({ triangles: 1_000_000, bytes: 2_097_152, nodes: 262_144, depth: 16 });
@@ -104,11 +104,14 @@ export const buildSupportPainted3mf = ({ source, model, paint, maximumUncompress
   });
 };
 
-// Normalization may repair imported meshes. Refuse a result that changed a
-// source facet, its vertex order, or its paint tree instead of moving paint to
-// an unrelated face. The only admitted package here is our single-mesh 3MF.
+// The native importer centers float32 mesh vertices around their bounding box,
+// retaining the double-precision center in the build translation. Comparing
+// world-space strings after adding that translation back loses float32 bits.
+// Compare in the native local frame instead, reproducing the exact float32
+// subtraction and native 3MF max_digits10 serialization (9 significant digits).
+// No geometric epsilon, nearest-facet remapping, repair or paint loss is allowed.
 export const assertSupportPaintRoundtrip = ({ before, after, maximumUncompressedBytes }) => {
-  const signature = source => {
+  const read = source => {
     const xml = readNormalized3mfXml({ source, maximumUncompressedBytes });
     const attribute = (tag, name) => new RegExp(`\\b${name}="([^"]*)"`).exec(tag)?.[1];
     const items = [...xml.matchAll(/<item\b[^>]*>/g)];
@@ -117,22 +120,39 @@ export const assertSupportPaintRoundtrip = ({ before, after, maximumUncompressed
     const vertices = [...xml.matchAll(/<vertex\b[^>]*>/g)].map(([tag]) => {
       const coordinates = ['x','y','z'].map(key => Number(attribute(tag, key)));
       if (coordinates.some(value => !Number.isFinite(value))) fail('Invalid normalized paint coordinates.');
-      const point = apply3mfTransform({ x: coordinates[0], y: coordinates[1], z: coordinates[2] }, transform);
-      return [point.x, point.y, point.z].map(Math.fround).join(',');
+      return coordinates.map(Math.fround);
     });
+    return { xml, vertices, transform, attribute };
+  };
+  const original = read(before), normalized = read(after);
+  if (original.transform.some((value, index) => value !== IDENTITY_3MF_TRANSFORM[index])) fail('Paint source must use its original coordinate frame.');
+  const minimum = [Infinity, Infinity, Infinity], maximum = [-Infinity, -Infinity, -Infinity];
+  for (const vertex of original.vertices) vertex.forEach((value, axis) => {
+    minimum[axis] = Math.min(minimum[axis], value);
+    maximum[axis] = Math.max(maximum[axis], value);
+  });
+  const center = minimum.map((value, axis) => (value + maximum[axis]) / 2);
+  const nativeTransform = [...IDENTITY_3MF_TRANSFORM.slice(0, 9), ...center.map(value => Number(value.toPrecision(9)))];
+  const unchangedFrame = normalized.transform.every((value, index) => value === IDENTITY_3MF_TRANSFORM[index]);
+  if (!unchangedFrame && normalized.transform.some((value, index) => value !== nativeTransform[index])) {
+    fail('Paint normalization changed the source coordinate frame.');
+  }
+  const expectedVertices = unchangedFrame ? original.vertices : original.vertices.map(vertex =>
+    vertex.map((value, axis) => Math.fround(value - Math.fround(center[axis]))));
+  const signature = ({ xml, attribute }, vertices) => {
     const facets = new Map();
     for (const [tag] of xml.matchAll(/<triangle\b[^>]*>/g)) {
       const key = ['v1','v2','v3'].map(name => {
         const index = Number(attribute(tag, name));
         if (!Number.isSafeInteger(index) || !vertices[index]) fail('Invalid normalized paint facet.');
-        return vertices[index];
+        return vertices[index].join(',');
       }).join(';');
       if (facets.has(key)) fail('Duplicate source facets cannot carry unambiguous support paint.');
       facets.set(key, attribute(tag, 'slic3rpe:custom_supports') || '');
     }
     return facets;
   };
-  const expected = signature(before), actual = signature(after);
+  const expected = signature(original, expectedVertices), actual = signature(normalized, normalized.vertices);
   if (expected.size !== actual.size || [...expected].some(([facet, paint]) => actual.get(facet) !== paint)) {
     fail('Normalization changed source facets or support paint. Repair the source explicitly before painting.');
   }
