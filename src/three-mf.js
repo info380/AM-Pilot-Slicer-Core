@@ -67,7 +67,7 @@ export const applyBuildTransformTo3mfXml = (xml, objectTransform) => {
 
 const deterministicEntry = value => [strToU8(value), { level: 6, mtime: FIXED_ZIP_TIME }];
 
-export const buildTransformed3mf = ({ source, objectTransform, maximumUncompressedBytes }) => {
+export const readNormalized3mfXml = ({ source, maximumUncompressedBytes }) => {
   if (!Number.isSafeInteger(maximumUncompressedBytes) || maximumUncompressedBytes <= 0) {
     throw new WorkerError('A bounded normalized 3MF expansion limit is required.', {
       code: 'slicer_source_3mf_limit_invalid'
@@ -109,7 +109,11 @@ export const buildTransformed3mf = ({ source, objectTransform, maximumUncompress
       code: 'slicer_source_3mf_invalid'
     });
   }
-  const transformedModel = applyBuildTransformTo3mfXml(strFromU8(entries[modelPath]), objectTransform);
+  return strFromU8(entries[modelPath]);
+};
+
+export const buildTransformed3mf = ({ source, objectTransform, maximumUncompressedBytes }) => {
+  const transformedModel = applyBuildTransformTo3mfXml(readNormalized3mfXml({ source, maximumUncompressedBytes }), objectTransform);
   return zipSync({
     '[Content_Types].xml': deterministicEntry(CONTENT_TYPES),
     '_rels/.rels': deterministicEntry(RELATIONSHIPS),

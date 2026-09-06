@@ -16,6 +16,7 @@ import {
   writeResultManifest
 } from './manifest.js';
 import { materializePlateInputs } from './plate.js';
+import { SUPPORT_PAINT_CAPABILITY } from './support-paint.js';
 import { compileProductionToolpath } from './toolpath.js';
 
 const LEASE_TERMINAL_CODES = new Set([
@@ -84,6 +85,9 @@ export const validateClaim = (claim, config) => {
   }
   const models = Array.isArray(claim.inputSnapshot.models) ? claim.inputSnapshot.models : [];
   const objects = Array.isArray(claim.inputSnapshot.plate?.objects) ? claim.inputSnapshot.plate.objects : [];
+  if (objects.some(object => object.supportPaint?.data) && run.capabilityRevisionId !== SUPPORT_PAINT_CAPABILITY) {
+    throw new WorkerError('Painted supports require the qualified annotation capability.', { code: 'slicer_support_paint_capability_required' });
+  }
   if (
     models.length === 0
     || objects.length === 0

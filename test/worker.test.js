@@ -76,6 +76,14 @@ test('accepts only claims pinned to the complete immutable release identity', ()
   });
 });
 
+test('painted claims require the painting capability on both immutable identities', () => {
+  const painted = claim();
+  painted.inputSnapshot.plate.objects[0].supportPaint = { data: '0:4' };
+  assert.throws(() => validateClaim(painted, config), { code: 'slicer_support_paint_capability_required' });
+  painted.run.capabilityRevisionId = painted.engine.capabilityRevisionId = 'fdm-prusa-2.9.3-protocol1-r3';
+  assert.equal(validateClaim(painted, config), painted);
+});
+
 test('retries transient model downloads without retaining a partial file', async t => {
   const workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'slicer-download-retry-'));
   t.after(() => fs.rm(workDir, { recursive: true, force: true }));

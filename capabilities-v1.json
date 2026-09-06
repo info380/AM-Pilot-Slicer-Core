@@ -1,7 +1,7 @@
 {
   "schema": "am-pilot-slicer-core-capabilities",
   "version": 1,
-  "capabilityRevisionId": "fdm-prusa-2.9.3-protocol1-r2",
+  "capabilityRevisionId": "fdm-prusa-2.9.3-protocol1-r3",
   "engineKey": "fdm.am_pilot_prusa_core",
   "workerProtocolVersion": 1,
   "engine": {
@@ -18,6 +18,17 @@
     "transforms": ["position_xyz", "rotation_xyz", "scale_xyz"],
     "projectOrigins": ["center"],
     "engineBedOrigins": ["front_left", "center"]
+  },
+  "supportPainting": {
+    "schema": "am-pilot-support-paint",
+    "version": 1,
+    "sourceFormats": ["stl"],
+    "nativeFormat": "3mf-fdm-supports-painting-v1",
+    "states": ["none", "enforce", "block"],
+    "subdivision": "four-midpoint-children",
+    "maximumDepth": 16,
+    "maximumNodes": 262144,
+    "maximumDataBytes": 2097152
   },
   "execution": {
     "concurrency": 1,

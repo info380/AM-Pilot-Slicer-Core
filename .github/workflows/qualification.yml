@@ -161,6 +161,15 @@ jobs:
             '.semanticVersion == $tag and .imageDigest == $digest and .qualification.status == "candidate"' \
             "${RUNNER_TEMP}/release-evidence/release-evidence.json" >/dev/null
           echo "image=${image}" >> "${GITHUB_OUTPUT}"
+      - name: Check out exact qualification source
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
+          git checkout --detach "refs/tags/${RELEASE_TAG}"
+          test "$(node -p "'v' + require('./package.json').version")" = "${RELEASE_TAG}"
       - name: Install Cosign
         uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
       - name: Verify digest signature identity
@@ -293,6 +302,27 @@ jobs:
             ([.cases[].status] | all(. == "passed"))
           ' --arg digest "${IMAGE_DIGEST}" "${output_dir}/failure-corpus-report.json" >/dev/null
           (cd "${output_dir}" && sha256sum ./* > SHA256SUMS)
+      - name: Qualify support paint on the exact image under production resource boundaries
+        shell: bash
+        env:
+          IMAGE: ${{ steps.candidate.outputs.image }}
+        run: |
+          set -euo pipefail
+          readonly output_dir="${RUNNER_TEMP}/support-paint-qualification"
+          mkdir -p "${output_dir}"
+          printf '%s\n' "${IMAGE}" > "${output_dir}/image.txt"
+          git rev-parse HEAD > "${output_dir}/source-revision.txt"
+          docker run --rm --platform linux/amd64 --network none --read-only \
+            --memory 512m --memory-swap 512m --cpus 0.5 --pids-limit 256 \
+            --security-opt no-new-privileges --cap-drop ALL \
+            --tmpfs /tmp:rw,nosuid,nodev,size=384m,mode=1777 \
+            --mount type=bind,source="${GITHUB_WORKSPACE}/test",target=/worker/test,readonly \
+            --env PRUSA_SLICER_INTEGRATION_CMD=/opt/prusa/bin/prusa-slicer \
+            --entrypoint node "${IMAGE}" --test --test-reporter=tap /worker/test/support-paint.test.js \
+            | tee "${output_dir}/native-paint-tests.tap"
+          grep -Fx '# skipped 0' "${output_dir}/native-paint-tests.tap"
+          grep -Fx '# fail 0' "${output_dir}/native-paint-tests.tap"
+          (cd "${output_dir}" && sha256sum ./* > SHA256SUMS)
       - name: Upload qualification evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -302,5 +332,6 @@ jobs:
             ${{ runner.temp }}/qualification-output/
             ${{ runner.temp }}/failure-qualification-output/
             ${{ runner.temp }}/release-evidence/
+            ${{ runner.temp }}/support-paint-qualification/
           if-no-files-found: error
           retention-days: 90

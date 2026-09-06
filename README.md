@@ -145,6 +145,30 @@ assets as well as short-lived workflow artifacts.
 See [SOURCE_OFFER.md](SOURCE_OFFER.md) and
 [docs/qualification.md](docs/qualification.md).
 
+## Support painting candidate (v0.3.0)
+
+Capability `fdm-prusa-2.9.3-protocol1-r3` admits version-1 source-bound support
+annotations on STL objects. The API snapshot retains the original STL SHA-256,
+facet count, and sparse native support trees. Only none/enforce/block and
+four-midpoint subdivision are accepted: 16 levels, 262,144 total nodes,
+2 MiB annotation text per object, and 1,000,000 source facets. Existing model,
+object, memory, CPU, archive-expansion and tenant limits are not widened.
+
+The worker builds an ephemeral native painted 3MF, normalizes it, verifies that
+facet coordinates, vertex order and paint survived, then uses the existing plate
+transform and slicing path. Changed/duplicate/degenerate facets fail closed;
+there is no implicit repair or source overwrite. Imported 3MF painting, seam
+painting, fuzzy-skin painting and geometry splitting are not part of this release.
+
+`test/support-paint.test.js` covers hostile input, source binding, native 3MF
+roundtrip, partial enforcers and blockers. Set `PRUSA_SLICER_INTEGRATION_CMD` to
+run its native test locally. The qualification workflow runs that test without
+skips on the **exact signed image digest**, with the existing production resource
+boundaries. A passing local desktop test is not image qualification or permission
+to promote production printing. Support settings remain explicit: enforcers
+require support generation; disabling automatic supports yields painted-only
+supports, while blockers affect automatically generated supports.
+
 ## License
 
 AM Pilot Slicer Core is licensed under the GNU Affero General Public License,
