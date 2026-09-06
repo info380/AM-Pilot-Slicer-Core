@@ -145,6 +145,21 @@ assets as well as short-lived workflow artifacts.
 See [SOURCE_OFFER.md](SOURCE_OFFER.md) and
 [docs/qualification.md](docs/qualification.md).
 
+## Painted mesh recentering correction (v0.3.2)
+
+The native importer centers mesh coordinates using float32 subtraction and
+serializes its retained translation with nine significant digits. The support
+paint preservation check now compares the exact native local coordinate frame,
+instead of reconstructing world coordinates with a non-reversible addition.
+Fractional, off-origin STL geometry can therefore retain its paint through
+normalization without a false geometry-change rejection. Changed facets, winding,
+paint trees and arbitrary transforms still fail closed; no geometric tolerance,
+implicit repair or source mutation is introduced.
+
+This release retains capability r3 and the existing resource boundaries. It needs
+its own signed immutable image and qualification/reproduction evidence before
+activation. Local desktop tests do not qualify a production worker image.
+
 ## Support painting candidate (v0.3.1)
 
 The immutable v0.3.0 release is rejected for activation: its generated release
