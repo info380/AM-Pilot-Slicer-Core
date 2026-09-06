@@ -170,6 +170,22 @@ jobs:
           git fetch --no-tags --depth=1 origin "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
           git checkout --detach "refs/tags/${RELEASE_TAG}"
           test "$(node -p "'v' + require('./package.json').version")" = "${RELEASE_TAG}"
+      - name: Match release capability to the exact worker source
+        shell: bash
+        env:
+          EVIDENCE_PATH: ${{ runner.temp }}/release-evidence/release-evidence.json
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs';
+          import { execFileSync } from 'node:child_process';
+          import { CAPABILITY_REVISION_ID, ENGINE_KEY, WORKER_PROTOCOL_VERSION } from './src/constants.js';
+          const evidence = JSON.parse(fs.readFileSync(process.env.EVIDENCE_PATH, 'utf8'));
+          assert.equal(evidence.capabilityRevisionId, CAPABILITY_REVISION_ID);
+          assert.equal(evidence.engineKey, ENGINE_KEY);
+          assert.equal(evidence.workerProtocolVersion, WORKER_PROTOCOL_VERSION);
+          assert.equal(evidence.source.revision, execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim());
+          NODE
       - name: Install Cosign
         uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
       - name: Verify digest signature identity

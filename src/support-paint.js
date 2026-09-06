@@ -4,7 +4,7 @@ import { WorkerError } from './errors.js';
 import { readNormalized3mfXml } from './three-mf.js';
 import { apply3mfTransform, parse3mfTransform } from './transform.js';
 
-export const SUPPORT_PAINT_CAPABILITY = 'fdm-prusa-2.9.3-protocol1-r3';
+export { SUPPORT_PAINT_CAPABILITY } from './constants.js';
 const limits = Object.freeze({ triangles: 1_000_000, bytes: 2_097_152, nodes: 262_144, depth: 16 });
 const fail = message => { throw new WorkerError(message, { code: 'slicer_support_paint_invalid' }); };
 

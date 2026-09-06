@@ -77,6 +77,7 @@ assert.match(qualification, /am-pilot-slicer-core-reproduction-report/);
 assert.match(qualification, /publishedBinaryChecksumSha256/);
 assert.match(qualification, /rebuiltBinaryChecksumSha256/);
 assert.match(qualification, /\.immutable == true/);
+assert.match(qualification, /assert\.equal\(evidence\.capabilityRevisionId, CAPABILITY_REVISION_ID\)/);
 assert.match(qualification, /run-failure-corpus\.mjs/);
 assert.match(qualification, /am-pilot-slicer-core-failure-corpus-report/);
 assert.match(qualification, /failure-qualification-output/);
