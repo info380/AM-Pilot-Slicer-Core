@@ -122,9 +122,12 @@ export const buildTransformed3mf = ({ source, objectTransform, maximumUncompress
       const separator = line.indexOf(' = ');
       return '<metadata type="object" key="' + escapeXml(line.slice(0, separator)) + '" value="' + escapeXml(line.slice(separator + 3)) + '"/>';
     }).join('\n');
-    const resources = [...transformedModel.matchAll(/<object\s[^>]*\bid="([0-9]+)"[^>]*>([\s\S]*?)<\/object>/g)]
-      .map(match => ({ id: match[1], triangles: [...match[2].matchAll(/<triangle\s/g)].length }))
-      .filter(resource => resource.triangles > 0);
+    const resources = [];
+    for (const match of transformedModel.matchAll(/<object\s[^>]*\bid="([0-9]+)"[^>]*>([\s\S]*?)<\/object>/g)) {
+      let triangles = 0;
+      for (const triangle of match[2].matchAll(/<triangle\s/g)) triangles += 1;
+      if (triangles) resources.push({ id: match[1], triangles });
+    }
     if (!resources.length) throw new WorkerError('Normalized 3MF has no mesh resources.', { code: 'slicer_source_3mf_invalid' });
     metadata['Metadata/Slic3r_PE_model.config'] = deterministicEntry('<?xml version="1.0" encoding="UTF-8"?><config>' + resources.map(({id, triangles}) =>
       '<object id="' + id + '">' + settings + '<volume firstid="0" lastid="' + (triangles - 1) + '"/></object>').join('') + '</config>');
