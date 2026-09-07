@@ -110,8 +110,12 @@ enough for every customer model.
 | `SLICER_MAX_GCODE_BYTES` | 67108864 |
 | `SLICER_MAX_MANIFEST_BYTES` | 1048576 |
 | `SLICER_MAX_TOOLPATH_PREVIEW_BYTES` | 268435456 |
-| `SLICER_MAX_MODELS_PER_RUN` | 8 |
-| `SLICER_MAX_OBJECTS_PER_PLATE` | 32 |
+
+There is no model or object-count cap. Legacy `SLICER_MAX_MODELS_PER_RUN`
+and `SLICER_MAX_OBJECTS_PER_PLATE` environment values are ignored. Empty plates
+remain invalid; byte budgets, execution limits and release-identity checks remain
+enforced. A rejected input on a verified lease is reported as a failed run,
+without terminating the worker's polling loop.
 
 Production promotion must record measured memory, CPU time, temporary storage,
 and output sizes from the qualification corpus. If the EUR 7 worker exceeds a

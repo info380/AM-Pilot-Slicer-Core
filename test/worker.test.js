@@ -7,7 +7,8 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { WorkerError } from '../src/errors.js';
-import { downloadModelWithRetry, validateClaim } from '../src/worker.js';
+import { downloadModelWithRetry, runClaim, validateClaim } from '../src/worker.js';
+import { materializePlateInputs } from '../src/plate.js';
 
 const digest = `sha256:${'a'.repeat(64)}`;
 const config = Object.freeze({
@@ -82,6 +83,45 @@ test('painted claims require the painting capability on both immutable identitie
   assert.throws(() => validateClaim(painted, config), { code: 'slicer_support_paint_capability_required' });
   painted.run.capabilityRevisionId = painted.engine.capabilityRevisionId = 'fdm-prusa-2.9.3-protocol1-r4';
   assert.equal(validateClaim(painted, config), painted);
+});
+
+test('admits 33 and 1000 objects and more than eight models within byte budgets', () => {
+  for (const count of [33, 1000]) {
+    const input = claim();
+    input.inputSnapshot.plate.objects = Array.from({length:count}, (_, i) => ({id:`object-${i}`, fileId:'file-01'}));
+    input.inputSnapshot.models = Array.from({length:9}, (_, i) => ({modelId:`model-${i}`, sizeBytes:1}));
+    assert.equal(validateClaim(input, config), input);
+  }
+});
+
+test('plate preparation no longer rejects legacy count limits', async () => {
+  const input = claim().inputSnapshot;
+  input.plate.objects = Array.from({length:33}, (_, i) => ({id:`object-${i}`}));
+  // Passing count validation must reach the next required contract check.
+  await assert.rejects(materializePlateInputs({inputSnapshot:input, effectiveConfiguration:{}, config}), {
+    code:'slicer_effective_configuration_invalid'
+  });
+});
+
+test('reports input rejection on the verified lease and can process the next job', async () => {
+  const failures = [];
+  const api = {fail:async details => failures.push(details)};
+  const empty = claim();
+  empty.inputSnapshot.plate.objects = [];
+  await runClaim({claim:empty, api, config});
+  const oversized = claim();
+  oversized.run.id = 'run-02';
+  oversized.inputSnapshot.models[0].sizeBytes = 33;
+  await runClaim({claim:oversized, api, config});
+  assert.deepEqual(failures.map(({runId,failureCode}) => ({runId,failureCode})), [
+    {runId:'run-01',failureCode:'slicer_input_snapshot_invalid'},
+    {runId:'run-02',failureCode:'slicer_source_model_size_invalid'}
+  ]);
+  assert.ok(failures.every(failure => failure.leaseToken === empty.lease.token));
+  const invalid = claim();
+  invalid.engine.id = 'untrusted';
+  await assert.rejects(runClaim({claim:invalid,api,config}), {code:'slicer_worker_claim_invalid'});
+  assert.equal(failures.length, 2);
 });
 
 test('object overrides cannot enter an incompatible claim', () => {

@@ -31,8 +31,6 @@ export const DEFAULTS = Object.freeze({
   maximumGcodeBytes: 67_108_864,
   maximumManifestBytes: 1_048_576,
   maximumToolpathPreviewBytes: 268_435_456,
-  maximumObjectsPerPlate: 32,
-  maximumModelsPerRun: 8,
   maximumLogBytes: 262_144,
   engineThreads: 1,
   retryBackoffMaximumMs: 30_000
