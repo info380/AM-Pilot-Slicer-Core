@@ -53,7 +53,7 @@ const log = (level, event, details = {}) => {
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const IMAGE_DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
 
-export const validateClaim = (claim, config) => {
+const validateClaimIdentity = (claim, config) => {
   const run = claim?.run;
   const engine = claim?.engine;
   const inputFingerprint = String(run?.inputFingerprint || '').toLowerCase();
@@ -84,6 +84,12 @@ export const validateClaim = (claim, config) => {
       code: 'slicer_worker_claim_invalid'
     });
   }
+  return claim;
+};
+
+export const validateClaim = (claim, config) => {
+  validateClaimIdentity(claim, config);
+  const { run } = claim;
   const models = Array.isArray(claim.inputSnapshot.models) ? claim.inputSnapshot.models : [];
   const objects = Array.isArray(claim.inputSnapshot.plate?.objects) ? claim.inputSnapshot.plate.objects : [];
   if (objects.some(object => Object.keys(object.printOverrides || {}).length) && run.capabilityRevisionId !== CAPABILITY_REVISION_ID) {
@@ -95,11 +101,9 @@ export const validateClaim = (claim, config) => {
   if (
     models.length === 0
     || objects.length === 0
-    || models.length > config.maximumModelsPerRun
-    || objects.length > config.maximumObjectsPerPlate
   ) {
-    throw new WorkerError('The claimed Slicer run exceeds the qualified model or object count.', {
-      code: 'slicer_input_limit_exceeded'
+    throw new WorkerError('The claimed Slicer run contains no models or plate objects.', {
+      code: 'slicer_input_snapshot_invalid'
     });
   }
   let totalModelBytes = 0;
@@ -191,12 +195,13 @@ const enrichResultMetrics = (metrics, effectiveConfiguration) => {
   });
 };
 
-const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal }) => {
-  const claim = validateClaim(rawClaim, config);
+export const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal }) => {
+  // Only a verified run/lease identity may receive a job failure report.
+  const claim = validateClaimIdentity(rawClaim, config);
   const { run, lease, inputSnapshot, effectiveConfiguration } = claim;
   const safeRunId = String(run.id).replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 80) || 'run';
-  const workDir = await fs.mkdtemp(path.join(config.workRoot, `${safeRunId}-`));
-  await fs.chmod(workDir, 0o700);
+  let workDir = null;
+  let heartbeat = null;
   const jobAbort = new AbortController();
   const jobSignal = shutdownSignal
     ? AbortSignal.any([shutdownSignal, jobAbort.signal])
@@ -217,20 +222,23 @@ const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal }) => {
       signal: jobSignal
     });
   };
-  const heartbeat = setInterval(async () => {
-    if (heartbeatActive || jobSignal.aborted) return;
-    heartbeatActive = true;
-    try {
-      await sendProgress(progress);
-    } catch (error) {
-      jobAbort.abort(error);
-    } finally {
-      heartbeatActive = false;
-    }
-  }, config.heartbeatIntervalMs);
-  heartbeat.unref?.();
-
   try {
+    validateClaim(claim, config);
+    workDir = await fs.mkdtemp(path.join(config.workRoot, `${safeRunId}-`));
+    await fs.chmod(workDir, 0o700);
+    heartbeat = setInterval(async () => {
+      if (heartbeatActive || jobSignal.aborted) return;
+      heartbeatActive = true;
+      try {
+        await sendProgress(progress);
+      } catch (error) {
+        jobAbort.abort(error);
+      } finally {
+        heartbeatActive = false;
+      }
+    }, config.heartbeatIntervalMs);
+    heartbeat.unref?.();
+
     await sendProgress({ stage: 'downloading', progressPercent: 3, message: 'Downloading immutable source models.' });
     const downloadedModels = new Map();
     const models = inputSnapshot.models;
@@ -340,7 +348,7 @@ const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal }) => {
     }
   } finally {
     clearInterval(heartbeat);
-    await fs.rm(workDir, { recursive: true, force: true });
+    if (workDir) await fs.rm(workDir, { recursive: true, force: true });
   }
 };
 

@@ -25,8 +25,8 @@ test('loads an immutable fail-closed worker identity', () => {
   assert.equal(config.maximumPlateInputBytes, 201_326_592);
   assert.equal(config.maximumGcodeBytes, 67_108_864);
   assert.equal(config.maximumToolpathPreviewBytes, 268_435_456);
-  assert.equal(config.maximumModelsPerRun, 8);
-  assert.equal(config.maximumObjectsPerPlate, 32);
+  assert.equal(config.maximumModelsPerRun, undefined);
+  assert.equal(config.maximumObjectsPerPlate, undefined);
   assert.ok(Object.isFrozen(config));
   assert.throws(() => loadWorkerConfig(environment({
     SLICER_MAX_MODEL_BYTES: '2097152',
@@ -42,6 +42,15 @@ test('rejects insecure non-loopback API origins', () => {
     () => loadWorkerConfig(environment({ AM_PILOT_API_BASE_URL: 'http://example.com' })),
     error => error.code === 'slicer_worker_configuration_invalid'
   );
+});
+
+test('legacy model and object count settings do not impose a cap', () => {
+  const config = loadWorkerConfig(environment({
+    SLICER_MAX_MODELS_PER_RUN:'8', SLICER_MAX_OBJECTS_PER_PLATE:'32'
+  }), {allowInsecureLoopback:true});
+  assert.equal(config.maximumModelsPerRun, undefined);
+  assert.equal(config.maximumObjectsPerPlate, undefined);
+  assert.equal(config.maximumTotalModelBytes, 134_217_728);
 });
 
 test('requires an explicit private proxy origin when proxy enforcement is enabled', () => {

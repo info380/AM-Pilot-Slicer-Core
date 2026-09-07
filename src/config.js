@@ -173,8 +173,6 @@ export const loadWorkerConfig = (environment = process.env, options = {}) => {
       1_048_576,
       2_147_483_648
     ),
-    maximumObjectsPerPlate: boundedInteger(environment, 'SLICER_MAX_OBJECTS_PER_PLATE', DEFAULTS.maximumObjectsPerPlate, 1, 10_000),
-    maximumModelsPerRun: boundedInteger(environment, 'SLICER_MAX_MODELS_PER_RUN', DEFAULTS.maximumModelsPerRun, 1, 10_000),
     maximumLogBytes: boundedInteger(environment, 'SLICER_MAX_LOG_BYTES', DEFAULTS.maximumLogBytes, 4_096, 4_194_304),
     engineThreads: boundedInteger(environment, 'SLICER_ENGINE_THREADS', DEFAULTS.engineThreads, 1, 4),
     retryBackoffMaximumMs: boundedInteger(environment, 'SLICER_RETRY_BACKOFF_MAX_MS', DEFAULTS.retryBackoffMaximumMs, 3_000, 300_000)

@@ -24,11 +24,6 @@ const verifyPlateContract = ({ inputSnapshot, effectiveConfiguration, config }) 
       code: 'slicer_input_snapshot_invalid'
     });
   }
-  if (models.length > config.maximumModelsPerRun || objects.length > config.maximumObjectsPerPlate) {
-    throw new WorkerError('The Slicer input exceeds the qualified worker object limits.', {
-      code: 'slicer_input_limit_exceeded'
-    });
-  }
   if (!effectiveConfiguration?.coordinateMapping || !effectiveConfiguration?.prusaConfig) {
     throw new WorkerError('The effective Slicer configuration is incomplete.', {
       code: 'slicer_effective_configuration_invalid'
