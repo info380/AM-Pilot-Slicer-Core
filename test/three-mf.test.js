@@ -13,6 +13,18 @@ const sourceXml = `<?xml version="1.0" encoding="UTF-8"?>
   <build><item objectid="1" transform="1 0 0 0 1 0 0 0 1 5 0 0"/></build>
 </model>`;
 
+test('native object settings preserve all mesh triangles and discard source scripts', () => {
+  const source = zipSync({'3D/3dmodel.model':strToU8(sourceXml), 'Metadata/Slic3r_PE_model.config':strToU8('unsafe-source')});
+  const options = { source, objectTransform:[1,0,0,0,1,0,0,0,1,0,0,0], maximumUncompressedBytes:1024*1024,
+    objectOverrides:{perimeters:4,fill_density:'40%'} };
+  const output = buildTransformed3mf(options);
+  assert.deepEqual(output,buildTransformed3mf(options));
+  const entries = unzipSync(output), metadata = strFromU8(entries['Metadata/Slic3r_PE_model.config']);
+  assert.match(metadata, /key="perimeters" value="4"/);
+  assert.match(metadata, /key="fill_density" value="40%"/);
+  assert.match(metadata, /volume firstid="0" lastid="0"/);
+  assert.doesNotMatch(metadata,/unsafe-source/);
+});
 test('emits a minimal deterministic geometry-only 3MF with composed placement', () => {
   const source = zipSync({
     '3D/3dmodel.model': strToU8(sourceXml),

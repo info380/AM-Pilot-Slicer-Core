@@ -1,7 +1,7 @@
 {
   "schema": "am-pilot-slicer-core-capabilities",
   "version": 1,
-  "capabilityRevisionId": "fdm-prusa-2.9.3-protocol1-r3",
+  "capabilityRevisionId": "fdm-prusa-2.9.3-protocol1-r4",
   "engineKey": "fdm.am_pilot_prusa_core",
   "workerProtocolVersion": 1,
   "engine": {
@@ -29,6 +29,12 @@
     "maximumDepth": 16,
     "maximumNodes": 262144,
     "maximumDataBytes": 2097152
+  },
+  "objectPrintOverrides": {
+    "version": 1,
+    "nativeFormat": "3mf-object-config",
+    "scopeCatalog": "schemas/prusa-object-settings-2.9.3.json",
+    "independentInstances": true
   },
   "execution": {
     "concurrency": 1,

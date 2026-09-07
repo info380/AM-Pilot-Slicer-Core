@@ -4,6 +4,7 @@ import path from 'node:path';
 import { SlicerWorkerApiClient } from './api-client.js';
 import {
   EFFECTIVE_CONFIG_SCHEMA,
+  CAPABILITY_REVISION_ID,
   EFFECTIVE_CONFIG_VERSION,
   INPUT_SNAPSHOT_SCHEMA,
   INPUT_SNAPSHOT_VERSION
@@ -85,6 +86,9 @@ export const validateClaim = (claim, config) => {
   }
   const models = Array.isArray(claim.inputSnapshot.models) ? claim.inputSnapshot.models : [];
   const objects = Array.isArray(claim.inputSnapshot.plate?.objects) ? claim.inputSnapshot.plate.objects : [];
+  if (objects.some(object => Object.keys(object.printOverrides || {}).length) && run.capabilityRevisionId !== CAPABILITY_REVISION_ID) {
+    throw new WorkerError('Object overrides require the qualified per-object capability.', { code: 'slicer_object_override_capability_required' });
+  }
   if (objects.some(object => object.supportPaint?.data) && run.capabilityRevisionId !== SUPPORT_PAINT_CAPABILITY) {
     throw new WorkerError('Painted supports require the qualified annotation capability.', { code: 'slicer_support_paint_capability_required' });
   }

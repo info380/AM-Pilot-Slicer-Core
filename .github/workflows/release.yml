@@ -108,6 +108,12 @@ jobs:
           trap 'docker rm -f "${container_id}" >/dev/null 2>&1 || true' EXIT
           docker cp "${container_id}:/opt/prusa/bin/prusa-slicer" /tmp/prusa-slicer
           test "$(docker inspect --format '{{.Config.User}}' "${IMAGE}@${DIGEST}")" = 'node'
+          docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --tmpfs /tmp:rw,nosuid,nodev,size=256m \
+            --mount type=bind,src="${GITHUB_WORKSPACE}/test",dst=/worker/test,readonly \
+            --env PRUSA_SLICER_INTEGRATION_CMD=/opt/prusa/bin/prusa-slicer \
+            "${IMAGE}@${DIGEST}" node --test test/prusa-integration.test.js \
+            > release-evidence/object-overrides-integration.txt
           sha256sum /tmp/prusa-slicer > release-evidence/prusa-slicer-binary.SHA256
           docker buildx imagetools inspect \
             --format '{{ json .SBOM }}' \

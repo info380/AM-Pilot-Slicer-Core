@@ -1,6 +1,7 @@
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 
 import { WorkerError } from './errors.js';
+import { serializePrusaConfig } from './config-ini.js';
 import {
   format3mfTransform,
   multiply3mfTransforms,
@@ -112,11 +113,29 @@ export const readNormalized3mfXml = ({ source, maximumUncompressedBytes }) => {
   return strFromU8(entries[modelPath]);
 };
 
-export const buildTransformed3mf = ({ source, objectTransform, maximumUncompressedBytes }) => {
+export const buildTransformed3mf = ({ source, objectTransform, maximumUncompressedBytes, objectOverrides = {} }) => {
   const transformedModel = applyBuildTransformTo3mfXml(readNormalized3mfXml({ source, maximumUncompressedBytes }), objectTransform);
+  const escapeXml = value => value.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+  const metadata = {};
+  if (Object.keys(objectOverrides).length) {
+    const settings = serializePrusaConfig(objectOverrides).trimEnd().split('\n').map(line => {
+      const separator = line.indexOf(' = ');
+      return '<metadata type="object" key="' + escapeXml(line.slice(0, separator)) + '" value="' + escapeXml(line.slice(separator + 3)) + '"/>';
+    }).join('\n');
+    const resources = [];
+    for (const match of transformedModel.matchAll(/<object\s[^>]*\bid="([0-9]+)"[^>]*>([\s\S]*?)<\/object>/g)) {
+      let triangles = 0;
+      for (const triangle of match[2].matchAll(/<triangle\s/g)) triangles += 1;
+      if (triangles) resources.push({ id: match[1], triangles });
+    }
+    if (!resources.length) throw new WorkerError('Normalized 3MF has no mesh resources.', { code: 'slicer_source_3mf_invalid' });
+    metadata['Metadata/Slic3r_PE_model.config'] = deterministicEntry('<?xml version="1.0" encoding="UTF-8"?><config>' + resources.map(({id, triangles}) =>
+      '<object id="' + id + '">' + settings + '<volume firstid="0" lastid="' + (triangles - 1) + '"/></object>').join('') + '</config>');
+  }
   return zipSync({
     '[Content_Types].xml': deterministicEntry(CONTENT_TYPES),
     '_rels/.rels': deterministicEntry(RELATIONSHIPS),
-    [MODEL_PATH]: deterministicEntry(transformedModel)
+    [MODEL_PATH]: deterministicEntry(transformedModel),
+    ...metadata
   });
 };

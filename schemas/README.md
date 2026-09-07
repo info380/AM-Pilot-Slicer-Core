@@ -1,5 +1,10 @@
 # Prusa Print Settings catalog
 
+`prusa-object-settings-2.9.3.json` records the native PrintObjectConfig and
+PrintRegionConfig scopes from the same pinned upstream PrintConfig.hpp.
+Its source URL and SHA-256 are embedded in the file. It is derived public
+AGPL-3.0-or-later engine metadata, not platform or tenant configuration.
+
 This data-only catalog enumerates all 195 controls in the Print Settings tab of
 PrusaSlicer 2.9.3 (upstream commit f1776c0a6347bb84986d10eac8db1021f5bd8548).
 Labels, defaults, option types, groups, limits, enumeration values and original
