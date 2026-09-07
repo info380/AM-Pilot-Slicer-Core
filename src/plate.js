@@ -5,6 +5,7 @@ import { WorkerError } from './errors.js';
 import { runProcess } from './process.js';
 import { buildTransformed3mf } from './three-mf.js';
 import { buildPlateObjectTransform } from './transform.js';
+import { compileObjectOverrides } from './object-overrides.js';
 import { buildSupportPainted3mf, assertSupportPaintRoundtrip } from './support-paint.js';
 
 const safeSegment = (value, fallback) => {
@@ -137,6 +138,7 @@ export const materializePlateInputs = async ({
     const transformed = buildTransformed3mf({
       source,
       objectTransform,
+      objectOverrides: compileObjectOverrides(object.printOverrides || {}),
       maximumUncompressedBytes: config.maximumNormalizedModelBytes
     });
     totalPlateInputBytes += transformed.length;

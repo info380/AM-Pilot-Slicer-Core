@@ -14,7 +14,7 @@ credentials remain in the private AM Pilot platform.
 
 - Engine key: `fdm.am_pilot_prusa_core`
 - Worker protocol: `1`
-- Capability revision: `fdm-prusa-2.9.3-protocol1-r3`
+- Capability revision: `fdm-prusa-2.9.3-protocol1-r4`
 - PrusaSlicer: `2.9.3`
 - Upstream commit: `f1776c0a6347bb84986d10eac8db1021f5bd8548`
 - Upstream source archive SHA-256:
@@ -144,6 +144,16 @@ with Trivy, and publish corresponding-source archives as permanent release
 assets as well as short-lived workflow artifacts.
 See [SOURCE_OFFER.md](SOURCE_OFFER.md) and
 [docs/qualification.md](docs/qualification.md).
+
+## Per-object print overrides (v0.4.0)
+
+Capability r4 carries each instance's sparse print overrides into native
+3MF object metadata. Settings inherit from the plate unless explicitly overridden.
+Source profile metadata is discarded; only pinned object/region keys and typed
+values are admitted. Generated volume ranges preserve the complete geometry.
+The release gate slices duplicate synthetic cubes with different layer heights
+and perimeter/infill settings, and checks their actual extrusion paths separately.
+Other instances, transforms and support annotations remain independent.
 
 ## Painted mesh recentering correction (v0.3.2)
 

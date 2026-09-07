@@ -80,10 +80,17 @@ test('painted claims require the painting capability on both immutable identitie
   const painted = claim();
   painted.inputSnapshot.plate.objects[0].supportPaint = { data: '0:4' };
   assert.throws(() => validateClaim(painted, config), { code: 'slicer_support_paint_capability_required' });
-  painted.run.capabilityRevisionId = painted.engine.capabilityRevisionId = 'fdm-prusa-2.9.3-protocol1-r3';
+  painted.run.capabilityRevisionId = painted.engine.capabilityRevisionId = 'fdm-prusa-2.9.3-protocol1-r4';
   assert.equal(validateClaim(painted, config), painted);
 });
 
+test('object overrides cannot enter an incompatible claim', () => {
+  const overridden = claim();
+  overridden.inputSnapshot.plate.objects[0].printOverrides = {perimeters:4};
+  assert.throws(() => validateClaim(overridden, config), {code:'slicer_object_override_capability_required'});
+  overridden.run.capabilityRevisionId = overridden.engine.capabilityRevisionId = 'fdm-prusa-2.9.3-protocol1-r4';
+  assert.equal(validateClaim(overridden, config), overridden);
+});
 test('retries transient model downloads without retaining a partial file', async t => {
   const workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'slicer-download-retry-'));
   t.after(() => fs.rm(workDir, { recursive: true, force: true }));

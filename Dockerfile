@@ -106,7 +106,7 @@ LABEL org.opencontainers.image.title="AM Pilot Slicer Core Worker" \
       org.opencontainers.image.description="Headless PrusaSlicer worker for the AM Pilot Slicer protocol" \
       org.opencontainers.image.licenses="AGPL-3.0-only" \
       org.opencontainers.image.source="https://github.com/info380/AM-Pilot-Slicer-Core" \
-      org.opencontainers.image.version="0.3.2" \
+      org.opencontainers.image.version="0.4.0" \
       org.opencontainers.image.prusaslicer.version="2.9.3" \
       org.opencontainers.image.prusaslicer.revision="f1776c0a6347bb84986d10eac8db1021f5bd8548"
 
@@ -145,6 +145,7 @@ WORKDIR /worker
 COPY --from=worker-dependencies /worker/node_modules ./node_modules
 COPY package.json ./
 COPY src ./src
+COPY schemas ./schemas
 
 RUN ldd /opt/prusa/bin/prusa-slicer | tee /tmp/prusa-slicer-ldd.txt \
     && ! grep -F 'not found' /tmp/prusa-slicer-ldd.txt \
