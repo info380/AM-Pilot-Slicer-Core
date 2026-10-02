@@ -43,7 +43,7 @@ export const assertBambuEffectiveConfiguration = configuration => {
     || !filament.compatible_printers?.includes(machine.name)) {
     throw failure('The process or filament preset does not support the selected machine and nozzle.');
   }
-  if (!['Textured PEI Plate', 'Smooth PEI Plate', 'Cool Plate', 'Engineering Plate', 'High Temp Plate', 'SuperTack Plate'].includes(processSettings.curr_bed_type)) {
+  if (!['Textured PEI Plate', 'Cool Plate', 'Engineering Plate', 'High Temp Plate', 'Supertack Plate'].includes(processSettings.curr_bed_type)) {
     throw failure('Select an explicit supported build plate.');
   }
   return settings;

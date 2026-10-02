@@ -55,10 +55,12 @@ test('offline preset resolver rejects traversal and inheritance cycles', async t
 
 const command = process.env.BAMBU_STUDIO_INTEGRATION_CMD;
 const resources = process.env.BAMBU_STUDIO_INTEGRATION_RESOURCES;
-test('real Bambu engine produces an A1 print archive without moving the assigned object', { skip: !command || !resources }, async t => {
+for (const model of ['A1', 'A2L']) for (const nozzle of ['0.2', '0.4', '0.6', '0.8']) {
+test(`real Bambu engine preserves ${model} ${nozzle} mm archive and preview placement`, { skip: !command || !resources }, async t => {
   const workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bambu-engine-')); t.after(() => fs.rm(workDir, { recursive: true, force: true }));
-  const presets = {};
-  for (const [kind, name] of [['machine', machine.name], ['process', '0.20mm Standard @BBL A1'], ['filament', 'Generic PLA @BBL A1']]) {
+  const machineName = `Bambu Lab ${model} ${nozzle} nozzle`;
+  const presets = { machine: (await resolveBambuPreset({ resourceRoot: resources, kind: 'machine', name: machineName })).settings };
+  for (const [kind, name] of [['process', presets.machine.default_print_profile], ['filament', `Generic PLA @BBL ${model}${nozzle === '0.2' ? ' 0.2 nozzle' : ''}`]]) {
     presets[kind] = (await resolveBambuPreset({ resourceRoot: resources, kind, name })).settings;
   }
   presets.process.curr_bed_type = 'Textured PEI Plate';
@@ -75,7 +77,7 @@ test('real Bambu engine produces an A1 print archive without moving the assigned
     maximumLogBytes: 262144, maximumArchiveBytes: 8388608, maximumExpandedArchiveBytes: 16777216, maximumGcodeBytes: 8388608 };
   await verifyBambuStudio(config);
   const result = await runBambuEngine({ config, workDir, plateInputPaths: [platePath], effectiveConfiguration: { engineAdapter: BAMBU_ENGINE_KEY, bambuConfig: { version: 1, ...presets } } });
-  assert.ok(result.metrics.estimatedTimeSeconds > 0); assert.equal(result.metrics.layerCount, 25);
+  assert.ok(result.metrics.estimatedTimeSeconds > 0); assert.ok(result.metrics.layerCount > 0);
   assert.ok(result.metrics.filamentLengthMm > 0);
   const text = await fs.readFile(result.gcodePath, 'utf8');
   const walls = [...text.matchAll(/; FEATURE: Outer wall\n([\s\S]*?)(?=; WIPE_START|; FEATURE:|$)/g)].map(m => m[1]).join('\n');
@@ -92,9 +94,11 @@ test('real Bambu engine produces an A1 print archive without moving the assigned
     effectiveConfiguration: { engineAdapter: BAMBU_ENGINE_KEY, bambuConfig: { version: 1, ...presets },
       coordinateMapping: { projectOrigin: 'center', translationMm: { x: 128, y: 128, z: 0 } } },
     gcodeArtifact: result.artifact, sliceEvidenceChecksumSha256: 'a'.repeat(64), summary: result.metrics, maximumBytes: 16777216 });
-  assert.equal(preview.header.layerCount, 25);
+  assert.equal(preview.header.layerCount, result.metrics.layerCount);
   assert.ok(preview.header.statistics.featureRecordCounts.external_perimeter > 20);
   assert.equal(preview.header.source.gcodeChecksumSha256, result.artifact.checksumSha256);
   assert.equal(preview.header.interpretation.dialect, 'bambu');
   assert.deepEqual(preview.header.catalogs.tools.map(tool => tool.id), [0]);
 });
+
+}

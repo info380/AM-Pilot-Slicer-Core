@@ -1,7 +1,7 @@
 name: Bambu engine integration
 on:
   pull_request:
-    paths: ['src/**', 'test/**', '.github/workflows/bambu-integration.yml', 'package-lock.json']
+    paths: ['src/**', 'test/**', '.github/workflows/bambu-integration.yml', 'package-lock.json', 'Dockerfile.bambu']
   workflow_dispatch:
 permissions:
   contents: read
@@ -35,3 +35,29 @@ jobs:
           BAMBU_STUDIO_INTEGRATION_CMD: /tmp/squashfs-root/AppRun
           BAMBU_STUDIO_INTEGRATION_RESOURCES: /tmp/squashfs-root/resources/profiles/BBL
         run: node --test test/bambu-engine.test.js
+
+  container:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Build the isolated native Bambu worker
+        run: docker build --file Dockerfile.bambu --tag bambu-worker:test .
+      - name: Test all variants without network or a writable root filesystem
+        run: |
+          test "$(docker inspect --format '{{.Config.User}}' bambu-worker:test)" = worker
+          mkdir -p /tmp/bambu-evidence
+          docker run --name bambu-test --network none --read-only --cap-drop ALL \
+            --security-opt no-new-privileges --memory 1g --cpus 2 \
+            --tmpfs /tmp:rw,nosuid,nodev,size=256m \
+            --mount type=bind,src="${GITHUB_WORKSPACE}/test",dst=/worker/test,readonly \
+            --env BAMBU_STUDIO_INTEGRATION_CMD=/opt/bambu/AppRun \
+            --env BAMBU_STUDIO_INTEGRATION_RESOURCES=/opt/bambu/resources/profiles/BBL \
+            bambu-worker:test node --test test/bambu-engine.test.js | tee /tmp/bambu-evidence/integration.txt
+          docker inspect --format '{{json .State}}' bambu-test > /tmp/bambu-evidence/container-state.json
+          test "$(docker inspect --format '{{.State.OOMKilled}}' bambu-test)" = false
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: bambu-container-evidence
+          path: /tmp/bambu-evidence/
