@@ -29,7 +29,9 @@ jobs:
           chmod +x /tmp/bambu.AppImage
           cd /tmp
           ./bambu.AppImage --appimage-extract >/dev/null
-          find /tmp/squashfs-root -maxdepth 3 -name '*bambu*' -o -name AppRun
+          head -60 /tmp/squashfs-root/AppRun
+          ldd /tmp/squashfs-root/bin/bambu-studio || true
+          /tmp/squashfs-root/AppRun --help
       - name: Slice synthetic geometry and verify archive and preview
         env:
           BAMBU_STUDIO_INTEGRATION_CMD: /tmp/squashfs-root/AppRun
