@@ -9,7 +9,12 @@ COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts --omit=dev
 FROM ${PRUSA_RUNTIME_IMAGE} AS geometry
 FROM ${UBUNTU_RUNTIME_IMAGE} AS bambu-download
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
+RUN rm -f /etc/apt/sources.list.d/ubuntu.sources \
+    && printf '%s\n' \
+      'deb [check-valid-until=no] http://snapshot.ubuntu.com/ubuntu/20261002T000000Z noble main universe' \
+      'deb [check-valid-until=no] http://snapshot.ubuntu.com/ubuntu/20261002T000000Z noble-updates main universe' \
+      'deb [check-valid-until=no] http://snapshot.ubuntu.com/ubuntu/20261002T000000Z noble-security main universe' > /etc/apt/sources.list \
+    && apt-get -o Acquire::Check-Valid-Until=false update && apt-get install -y --no-install-recommends ca-certificates curl \
     && curl --fail --location --proto '=https' --tlsv1.2 \
       'https://github.com/bambulab/BambuStudio/releases/download/v02.08.02.61/BambuStudio_ubuntu22.04-v02.08.02.61-20260820225108.AppImage' \
       --output /tmp/bambu.AppImage \
@@ -21,7 +26,12 @@ LABEL org.opencontainers.image.title="AM Pilot Bambu Slicer Worker" \
       org.opencontainers.image.licenses="AGPL-3.0-only" \
       org.opencontainers.image.bambustudio.version="02.08.02.61" \
       org.opencontainers.image.bambustudio.revision="926a7192574bcb9b3a732e1ec59a46d79cb45466"
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN rm -f /etc/apt/sources.list.d/ubuntu.sources \
+    && printf '%s\n' \
+      'deb [check-valid-until=no] http://snapshot.ubuntu.com/ubuntu/20261002T000000Z noble main universe' \
+      'deb [check-valid-until=no] http://snapshot.ubuntu.com/ubuntu/20261002T000000Z noble-updates main universe' \
+      'deb [check-valid-until=no] http://snapshot.ubuntu.com/ubuntu/20261002T000000Z noble-security main universe' > /etc/apt/sources.list \
+    && apt-get -o Acquire::Check-Valid-Until=false update && apt-get install -y --no-install-recommends \
       ca-certificates libwebkit2gtk-4.1-0 libglu1-mesa libosmesa6 libsecret-1-0 \
       libgstreamer-plugins-base1.0-0 libpng16-16t64 libgmp10 \
     && rm -rf /var/lib/apt/lists/* \
@@ -34,6 +44,7 @@ COPY --from=dependencies /worker/node_modules ./node_modules
 COPY package.json package-lock.json ./
 COPY src ./src
 COPY schemas ./schemas
+COPY LICENSE NOTICE THIRD_PARTY_NOTICES.md SOURCE_OFFER.md ./
 ENV NODE_ENV=production LD_LIBRARY_PATH=/opt/prusa/lib \
     PRUSA_SLICER_CMD=/opt/prusa/bin/prusa-slicer \
     BAMBU_STUDIO_CMD=/opt/bambu/AppRun \

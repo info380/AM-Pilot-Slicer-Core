@@ -23,13 +23,34 @@ versions, patches, and checksums used by the pinned build.
 The release publishes the exact checksum-locked source archive linked into
 the PrusaSlicer binary.
 
-## fflate 0.8.2
+## fflate 0.8.3
 
 - Project: <https://github.com/101arrowz/fflate>
-- Registry package: <https://www.npmjs.com/package/fflate/v/0.8.2>
+- Registry package: <https://www.npmjs.com/package/fflate/v/0.8.3>
 - License: MIT
 - Lockfile integrity is recorded in `package-lock.json`.
 
 The complete installed license text is available in
 `node_modules/fflate/LICENSE` and is present in the OCI image's package
 inventory/SBOM.
+
+## Bambu Studio 02.08.02.61 (Bambu worker variant only)
+
+- Project: <https://github.com/bambulab/BambuStudio>
+- Exact source commit: `926a7192574bcb9b3a732e1ec59a46d79cb45466`
+- License: GNU Affero General Public License, version 3
+- Source archive SHA-256: `3c0d92559057709a2e500824acb1cfc4b93e0ef0a218c2e404e2ce466b0c7d4b`
+- Upstream Linux AppImage SHA-256: `69426a59682574591590f51c913d3889baa19252d1c8e9fcae2497eb0ed6bf92`
+
+The Bambu variant redistributes the unmodified upstream Linux executable and
+resources. The corresponding source archive includes upstream build scripts,
+dependency definitions, patches and license notices. It uses the separate Prusa
+runtime above only for source geometry normalization. Network printer plugins
+are not installed or used by the worker. Ubuntu package versions are recorded
+in its SBOM and resolved from the 20261002T000000Z Ubuntu snapshot.
+
+## Undici 8.10.1
+
+- Project: <https://github.com/nodejs/undici>
+- License: MIT
+- Exact package and integrity: `package-lock.json`.

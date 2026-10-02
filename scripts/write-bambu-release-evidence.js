@@ -1,0 +1,13 @@
+import fs from 'node:fs';
+import { BAMBU_ENGINE_KEY, BAMBU_CAPABILITY_REVISION, BAMBU_STUDIO_VERSION, BAMBU_UPSTREAM_REVISION } from '../src/bambu-engine.js';
+const path='release-evidence/release-evidence.json';
+const evidence=JSON.parse(fs.readFileSync(path,'utf8'));
+evidence.engineKey=BAMBU_ENGINE_KEY;
+evidence.capabilityRevisionId=BAMBU_CAPABILITY_REVISION;
+evidence.source.bambuStudioVersion=BAMBU_STUDIO_VERSION;
+evidence.source.bambuStudioUpstreamCommit=BAMBU_UPSTREAM_REVISION;
+evidence.source.bambuStudioSourceArchiveChecksumSha256='3c0d92559057709a2e500824acb1cfc4b93e0ef0a218c2e404e2ce466b0c7d4b';
+evidence.source.ubuntuSnapshot='20261002T000000Z';
+evidence.artifacts.bambuStudioSource=evidence.artifacts.prusaSlicerSource.replace(/PrusaSlicer-[^/]+$/,`BambuStudio-${BAMBU_UPSTREAM_REVISION}.tar.gz`);
+evidence.artifacts.binaryChecksum=evidence.artifacts.binaryChecksum.replace('prusa-slicer-binary.SHA256','bambu-studio-binary.SHA256');
+fs.writeFileSync(path,JSON.stringify(evidence,null,2)+'\n');
