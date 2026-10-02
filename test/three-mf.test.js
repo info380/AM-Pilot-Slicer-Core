@@ -72,3 +72,15 @@ test('assembles independent input object IDs without changing placements', async
   assert.match(xml, /<item objectid="4" transform="1 0 0 0 1 0 0 0 1 40 20 0"/);
   assert.throws(() => mergePlate3mf({ sources: [source(10), source(40)], maximumUncompressedBytes: 500 }));
 });
+
+test('Bambu plate assembly rejects unsupported resources instead of silently dropping them', async()=>{
+  const {mergePlate3mf}=await import('../src/three-mf.js');
+  for(const extra of ['<basematerials id="3"/>','<unknown/>']) {
+    const source=zipSync({'3D/3dmodel.model':strToU8(sourceXml.replace('</resources>',extra+'</resources>'))});
+    assert.throws(()=>mergePlate3mf({sources:[source],maximumUncompressedBytes:100000}),{code:'slicer_source_3mf_invalid'});
+  }
+  const source=zipSync({'3D/3dmodel.model':strToU8(sourceXml)});
+  const result=mergePlate3mf({sources:Array(14).fill(source),maximumUncompressedBytes:100000});
+  const xml=strFromU8(unzipSync(result)['3D/3dmodel.model']);
+  assert.match(xml,/<object id="14"/);assert.match(xml,/<item objectid="14"/);
+});

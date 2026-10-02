@@ -156,6 +156,10 @@ export const mergePlate3mf = ({ sources, maximumUncompressedBytes }) => {
     const buildBody = xml.match(/<build\b[^>]*>([\s\S]*?)<\/build\s*>/i)?.[1];
     if (!resourceBody || !buildBody) throw new WorkerError('Normalized plate geometry is incomplete.', { code: 'slicer_source_3mf_invalid' });
     const objects = [...resourceBody.matchAll(/<object\b[^>]*\bid="([0-9]+)"[^>]*>[\s\S]*?<\/object\s*>/g)];
+    const unhandledResources = objects.reduce((rest, object) => rest.replace(object[0], ''), resourceBody).replace(/<!--[\s\S]*?-->/g, '').trim();
+    if (unhandledResources || /\b(?:pid|pindex|p1|p2|p3|requiredextensions)\s*=/.test(xml)) {
+      throw new WorkerError('Normalized Bambu input contains unsupported material resources or extensions.', { code: 'slicer_source_3mf_invalid' });
+    }
     const ids = new Map();
     for (const object of objects) {
       if (ids.has(object[1])) throw new WorkerError('Duplicate geometry object ID.', { code: 'slicer_source_3mf_invalid' });
@@ -166,8 +170,9 @@ export const mergePlate3mf = ({ sources, maximumUncompressedBytes }) => {
       if (!ids.has(id)) throw new WorkerError('Missing geometry reference.', { code: 'slicer_source_3mf_invalid' });
       return `objectid="${ids.get(id)}"`;
     };
-    for (const object of objects) resources.push(object[0].replace(/(<object\b[^>]*\bid=")[0-9]+"/, `$1${ids.get(object[1])}"`).replace(/\bobjectid="([0-9]+)"/g, reference));
+    for (const object of objects) resources.push(object[0].replace(/(<object\b[^>]*\bid=")[0-9]+"/, (_match, prefix) => `${prefix}${ids.get(object[1])}"`).replace(/\bobjectid="([0-9]+)"/g, reference));
     const items = [...buildBody.matchAll(/<item\b[^>]*\/>/g)];
+    if (items.reduce((rest, item) => rest.replace(item[0], ''), buildBody).replace(/<!--[\s\S]*?-->/g, '').trim()) throw new WorkerError('Unsupported plate build elements.', { code: 'slicer_source_3mf_invalid' });
     if (!items.length) throw new WorkerError('Plate contains no placed objects.', { code: 'slicer_source_3mf_invalid' });
     build.push(...items.map(item => item[0].replace(/\bobjectid="([0-9]+)"/g, reference)));
   }
