@@ -93,7 +93,7 @@ export const materializePlateInputs = async ({
   }
 
   const bambu = effectiveConfiguration.engineAdapter === BAMBU_ENGINE_KEY;
-  if (bambu && objects.some(object => object.supportPaint != null || Object.keys(object.printOverrides || {}).length)) {
+  if (bambu && objects.some(object => object.supportPaint?.data || Object.keys(object.printOverrides || {}).length)) {
     throw new WorkerError('This Bambu revision does not support object overrides or painted supports.', { code: 'slicer_object_overrides_unqualified' });
   }
   const result = [];
@@ -109,7 +109,7 @@ export const materializePlateInputs = async ({
     if (object.placement?.status !== 'placed') {
       throw new WorkerError('A plate object has not been placed.', { code: 'slicer_placement_incomplete' });
     }
-    if (object.supportPaint != null) {
+    if (object.supportPaint?.data) {
       const model = models.find(entry => entry.projectFileId === object.fileId);
       const annotatedPath = path.join(workDir, `paint-source-${index}.3mf`);
       const normalizedPath = path.join(workDir, `paint-normalized-${index}.3mf`);
