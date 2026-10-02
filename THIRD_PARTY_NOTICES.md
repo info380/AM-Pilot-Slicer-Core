@@ -54,3 +54,7 @@ in its SBOM and resolved from the 20261002T000000Z Ubuntu snapshot.
 - Project: <https://github.com/nodejs/undici>
 - License: MIT
 - Exact package and integrity: `package-lock.json`.
+
+The headless Bambu image excludes the upstream desktop `resources/web` UI assets.
+Those browser components are not used by native slicing; the engine binary and
+profile resources remain unchanged. The complete upstream source is still supplied.

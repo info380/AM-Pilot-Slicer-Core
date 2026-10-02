@@ -21,7 +21,8 @@ RUN rm -f /etc/apt/sources.list.d/ubuntu.sources \
       'https://github.com/bambulab/BambuStudio/releases/download/v02.08.02.61/BambuStudio_ubuntu22.04-v02.08.02.61-20260820225108.AppImage' \
       --output /tmp/bambu.AppImage \
     && echo '69426a59682574591590f51c913d3889baa19252d1c8e9fcae2497eb0ed6bf92  /tmp/bambu.AppImage' | sha256sum --check --strict \
-    && chmod +x /tmp/bambu.AppImage && cd /opt && /tmp/bambu.AppImage --appimage-extract >/dev/null
+    && chmod +x /tmp/bambu.AppImage && cd /opt && /tmp/bambu.AppImage --appimage-extract >/dev/null \
+    && rm -rf /opt/squashfs-root/resources/web
 FROM ${UBUNTU_RUNTIME_IMAGE} AS runtime
 COPY --from=dependencies /worker/bootstrap-ca.crt /etc/ssl/certs/ca-certificates.crt
 LABEL org.opencontainers.image.title="AM Pilot Bambu Slicer Worker" \
