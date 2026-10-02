@@ -1,3 +1,5 @@
+import { BAMBU_ENGINE_KEY } from './bambu-engine.js';
+import { arcPreviewPoints, ARC_PREVIEW_TOLERANCE_MM } from './arc.js';
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import fs from 'node:fs/promises';
@@ -44,6 +46,9 @@ const FEATURES = Object.freeze([
 
 const FEATURE_BY_COMMENT = new Map([
   ['perimeter', 1],
+  ['inner wall', 1], ['outer wall', 2], ['overhang wall', 3],
+  ['sparse infill', 4], ['internal solid infill', 5], ['bottom surface', 5], ['top surface', 6],
+  ['bridge', 7], ['brim', 10], ['skirt', 10], ['prime tower', 12],
   ['external perimeter', 2],
   ['overhang perimeter', 3],
   ['internal infill', 4],
@@ -182,8 +187,9 @@ export const compileProductionToolpath = async ({
   if (effectiveConfiguration?.coordinateMapping?.projectOrigin !== 'center') {
     throw toolpathError('Production toolpaths require a center-origin project coordinate system.');
   }
+  const bambu = effectiveConfiguration?.engineAdapter === BAMBU_ENGINE_KEY;
   const filamentDiameterMm = firstPositiveConfigNumber(
-    effectiveConfiguration?.prusaConfig?.filament_diameter,
+    bambu ? effectiveConfiguration?.bambuConfig?.filament?.filament_diameter : effectiveConfiguration?.prusaConfig?.filament_diameter,
     'Filament diameter'
   );
   const filamentAreaMm2 = Math.PI * Math.pow(filamentDiameterMm / 2, 2);
@@ -212,6 +218,7 @@ export const compileProductionToolpath = async ({
   let extrusionAbsolute = true;
   let activeTool = 0;
   let lineNumber = 0;
+  let skippedBambuBlock = false;
   const position = { x: 0, y: 0, z: 0, e: 0, feedMmPerMinute: 0 };
 
   const flushChunk = async () => {
@@ -294,7 +301,13 @@ export const compileProductionToolpath = async ({
     for await (const rawLine of lines) {
       lineNumber += 1;
       if (lineNumber > 0xffffffff) throw toolpathError('G-code contains too many source lines.');
-      let match = rawLine.match(/^;\s*LAYER_CHANGE\b/i);
+      if (bambu && /^;\s*SKIPPABLE_START\b/.test(rawLine)) {
+        if (skippedBambuBlock) throw toolpathError('Nested Bambu firmware blocks are unsupported.');
+        skippedBambuBlock = true; continue;
+      }
+      if (bambu && /^;\s*SKIPPABLE_END\b/.test(rawLine)) { skippedBambuBlock = false; continue; }
+      if (skippedBambuBlock) continue;
+      let match = rawLine.match(bambu ? /^;\s*CHANGE_LAYER\b/i : /^;\s*LAYER_CHANGE\b/i);
       if (match) {
         finalizeLayer();
         currentLayer = {
@@ -308,23 +321,24 @@ export const compileProductionToolpath = async ({
         };
         continue;
       }
-      match = rawLine.match(/^;\s*Z:\s*([-+]?(?:\d+(?:\.\d*)?|\.\d+))/i);
+      match = rawLine.match(bambu ? /^;\s*Z_HEIGHT:\s*([-+]?(?:\d+(?:\.\d*)?|\.\d+))/i : /^;\s*Z:\s*([-+]?(?:\d+(?:\.\d*)?|\.\d+))/i);
       if (match && currentLayer) {
         currentLayer.zMm = Number(match[1]) - translation.z;
         continue;
       }
-      match = rawLine.match(/^;\s*HEIGHT:\s*([-+]?(?:\d+(?:\.\d*)?|\.\d+))/i);
+      match = rawLine.match(bambu ? /^;\s*LAYER_HEIGHT:\s*([-+]?(?:\d+(?:\.\d*)?|\.\d+))/i : /^;\s*HEIGHT:\s*([-+]?(?:\d+(?:\.\d*)?|\.\d+))/i);
       if (match && currentLayer) {
         currentLayer.heightMm = Number(match[1]);
         currentHeightMm = currentLayer.heightMm;
         continue;
       }
-      match = rawLine.match(/^;\s*TYPE:\s*(.+?)\s*$/i);
+      match = rawLine.match(bambu ? /^;\s*FEATURE:\s*(.+?)\s*$/i : /^;\s*TYPE:\s*(.+?)\s*$/i);
       if (match) {
         currentFeature = featureFromComment(match[1]);
+        if (bambu && currentFeature === 13 && currentLayer) { finalizeLayer(); currentLayer = null; }
         continue;
       }
-      match = rawLine.match(/^;\s*WIDTH:\s*([-+]?(?:\d+(?:\.\d*)?|\.\d+))/i);
+      match = rawLine.match(bambu ? /^;\s*LINE_WIDTH:\s*([-+]?(?:\d+(?:\.\d*)?|\.\d+))/i : /^;\s*WIDTH:\s*([-+]?(?:\d+(?:\.\d*)?|\.\d+))/i);
       if (match) {
         currentWidthMm = Number(match[1]);
         continue;
@@ -341,6 +355,7 @@ export const compileProductionToolpath = async ({
       if (command === 'G91') { coordinatesAbsolute = false; continue; }
       if (command === 'M82') { extrusionAbsolute = true; continue; }
       if (command === 'M83') { extrusionAbsolute = false; continue; }
+      if (bambu && (command.startsWith('T') || command === 'G17')) continue;
       if (command.startsWith('T')) {
         activeTool = Number(command.slice(1));
         if (!Number.isInteger(activeTool) || activeTool < 0 || activeTool > 65535) {
@@ -356,7 +371,7 @@ export const compileProductionToolpath = async ({
         if (parameters.has('E')) position.e = finiteNumber(parameters.get('E'), 'G92 E');
         continue;
       }
-      if ((command === 'G2' || command === 'G3') && currentLayer) {
+      if (!bambu && (command === 'G2' || command === 'G3') && currentLayer) {
         throw toolpathError('Arc moves require a future production toolpath dialect.', 'slicer_toolpath_command_unsupported');
       }
       if (command === 'G10' || command === 'G11') {
@@ -383,7 +398,8 @@ export const compileProductionToolpath = async ({
         });
         continue;
       }
-      if (command !== 'G0' && command !== 'G1') {
+      const isArc = bambu && (command === 'G2' || command === 'G3');
+      if (command !== 'G0' && command !== 'G1' && !isArc) {
         if (command.startsWith('G') && currentLayer && command !== 'G4') {
           throw toolpathError(
             `G-code command ${command} requires a reviewed production toolpath interpretation.`,
@@ -393,7 +409,8 @@ export const compileProductionToolpath = async ({
         continue;
       }
 
-      const next = { ...position };
+      const target = { ...position };
+      let next = target;
       for (const axis of ['X', 'Y', 'Z']) {
         if (!parameters.has(axis)) continue;
         const key = axis.toLowerCase();
@@ -401,6 +418,8 @@ export const compileProductionToolpath = async ({
       }
       if (parameters.has('E')) next.e = extrusionAbsolute ? parameters.get('E') : position.e + parameters.get('E');
       if (parameters.has('F')) next.feedMmPerMinute = parameters.get('F');
+      const arcPoints = isArc && currentLayer ? arcPreviewPoints({ start: position, end: target, parameters, clockwise: command === 'G2' }) : [target];
+      for (next of arcPoints) {
       const extrusionDelta = parameters.has('E') ? next.e - position.e : 0;
       const dx = next.x - position.x;
       const dy = next.y - position.y;
@@ -448,9 +467,11 @@ export const compileProductionToolpath = async ({
         moveKind,
         featureKind: currentFeature,
         toolIndex: activeTool,
-        flags: 0
+        flags: isArc ? 2 : 0
       });
+      }
     }
+    if (skippedBambuBlock) throw toolpathError('Unterminated Bambu firmware block.');
     finalizeLayer();
     await flushChunk();
   } finally {
@@ -481,6 +502,7 @@ export const compileProductionToolpath = async ({
       plateOrigin: 'center',
       axes: 'x-right,y-back,z-up'
     }),
+    ...(bambu ? { interpretation: { dialect: 'bambu', scope: 'slicer-generated-model-toolpaths', firmwareConditionalBlocks: 'excluded', arcPreviewToleranceMm: ARC_PREVIEW_TOLERANCE_MM } } : {}),
     recordCount,
     layerCount: layers.length,
     boundsMm: frozenBounds(bounds),

@@ -46,7 +46,7 @@ export const runProcess = async ({
   let settled = false;
   const timer = setTimeout(() => {
     child.kill('SIGKILL');
-    finish(new WorkerError('PrusaSlicer exceeded the qualified job timeout.', {
+    finish(new WorkerError('The slicing engine exceeded the qualified job timeout.', {
       code: 'slicer_engine_timeout'
     }));
   }, timeoutMs);
@@ -75,7 +75,7 @@ export const runProcess = async ({
     stderr = appendBounded(stderr, chunk, maximumLogBytes);
     onOutput?.('stderr', chunk.toString('utf8'));
   });
-  child.on('error', error => finish(new WorkerError('PrusaSlicer could not be started.', {
+  child.on('error', error => finish(new WorkerError('The slicing engine could not be started.', {
     code: 'slicer_engine_start_failed',
     cause: error
   })));
@@ -86,7 +86,7 @@ export const runProcess = async ({
       return;
     }
     finish(new WorkerError(
-      `PrusaSlicer failed while generating the requested output (exit ${code ?? 'unknown'}${processSignal ? `, ${processSignal}` : ''}).`,
+      `The slicing engine failed while generating the requested output (exit ${code ?? 'unknown'}${processSignal ? `, ${processSignal}` : ''}).`,
       {
         code: 'slicer_engine_failed',
         cause: new Error((stderr || stdout).replace(/[\r\n\t]+/g, ' ').trim().slice(-600))

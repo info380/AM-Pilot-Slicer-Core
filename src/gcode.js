@@ -91,16 +91,16 @@ export const inspectGcode = async (gcodePath, maximumBytes) => {
   let layerCount = 0;
   const lines = createInterface({ input: createReadStream(gcodePath, { encoding: 'utf8' }), crlfDelay: Infinity });
   for await (const line of lines) {
-    let match = line.match(/^;\s*estimated printing time(?: \(normal mode\))?\s*=\s*(.+)$/i);
+    let match = line.match(/^;\s*(?:estimated printing time(?: \(normal mode\))?\s*=|model printing time:.*?total estimated time:)\s*(.+)$/i);
     if (match) {
       const parsed = durationSeconds(match[1]);
       if (parsed !== null) metrics.estimatedTimeSeconds = parsed;
     }
-    match = line.match(/^;\s*filament used \[mm\]\s*=\s*([0-9.]+)/i);
+    match = line.match(/^;\s*(?:filament used \[mm\]\s*=|total filament length \[mm\]\s*:)\s*([0-9.]+)/i);
     if (match && Number.isFinite(Number(match[1]))) metrics.filamentLengthMm = Number(match[1]);
-    match = line.match(/^;\s*filament used \[g\]\s*=\s*([0-9.]+)/i);
+    match = line.match(/^;\s*(?:filament used \[g\]\s*=|total filament weight \[g\]\s*:)\s*([0-9.]+)/i);
     if (match && Number.isFinite(Number(match[1]))) metrics.filamentMassG = Number(match[1]);
-    if (/^;\s*LAYER_CHANGE\b/i.test(line)) layerCount += 1;
+    if (/^;\s*(?:LAYER_CHANGE|CHANGE_LAYER)\b/i.test(line)) layerCount += 1;
   }
   if (layerCount > 0) metrics.layerCount = layerCount;
   return Object.freeze({

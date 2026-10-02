@@ -21,3 +21,7 @@ Release artifacts are retained with the applicable release record. If an
 artifact is unavailable, open a public repository issue identifying the image
 digest. AM Pilot will provide the corresponding source for covered releases in
 accordance with GNU AGPLv3.
+
+Bambu worker releases (`bambu-v*`) additionally publish the exact Bambu Studio
+source archive and retain its upstream dependency/build definitions and notices.
+The Bambu image and Prusa image have separate immutable digests and evidence.
