@@ -49,7 +49,7 @@ runtime above only for source geometry normalization. Network printer plugins
 are not installed or used by the worker. Ubuntu package versions are recorded
 in its SBOM and resolved from the 20261002T000000Z Ubuntu snapshot.
 
-## Undici 8.10.1
+## Undici 8.10.2
 
 - Project: <https://github.com/nodejs/undici>
 - License: MIT

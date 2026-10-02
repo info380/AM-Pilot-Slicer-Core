@@ -115,7 +115,7 @@ assert.match(qualificationFailureCorpus, /chmod\(reportPath, 0o644\)/);
 assert.match(egressProxy, /slicer_egress_proxy_rejected/);
 assert.match(egressProxy, /authority\.host !== config\.allowedHost/);
 assert.match(egressProxy, /authority\.port !== config\.allowedPort/);
-assert.equal(packageManifest.dependencies.undici, '8.10.1');
+assert.equal(packageManifest.dependencies.undici, '8.10.2');
 assert.match(license, /GNU AFFERO GENERAL PUBLIC LICENSE/);
 assert.match(license, /Version 3, 19 November 2007/);
 process.stdout.write('Release contract verified.\n');
