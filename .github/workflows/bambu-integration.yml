@@ -19,7 +19,7 @@ jobs:
       - name: Install headless runtime dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.0-37 libglu1-mesa libosmesa6 libsecret-1-0 libgstreamer-plugins-base1.0-0
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-0 libglu1-mesa libosmesa6 libsecret-1-0 libgstreamer-plugins-base1.0-0
       - name: Obtain and verify the upstream release
         run: |
           curl --fail --location --proto '=https' --tlsv1.2 \
@@ -29,8 +29,6 @@ jobs:
           chmod +x /tmp/bambu.AppImage
           cd /tmp
           ./bambu.AppImage --appimage-extract >/dev/null
-          head -60 /tmp/squashfs-root/AppRun
-          ldd /tmp/squashfs-root/bin/bambu-studio || true
           /tmp/squashfs-root/AppRun --help
       - name: Slice synthetic geometry and verify archive and preview
         env:
