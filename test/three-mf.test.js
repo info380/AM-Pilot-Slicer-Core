@@ -60,3 +60,15 @@ test('rejects a normalized 3MF whose expansion exceeds the configured budget', (
     maximumUncompressedBytes: 1024
   }), { code: 'slicer_source_3mf_expansion_limit_exceeded' });
 });
+
+test('assembles independent input object IDs without changing placements', async () => {
+  const { mergePlate3mf } = await import('../src/three-mf.js');
+  const { zipSync, strToU8, strFromU8, unzipSync } = await import('fflate');
+  const source = x => zipSync({ '3D/3dmodel.model': strToU8(`<model unit="millimeter"><resources><object id="1" type="model"><mesh><vertices><vertex x="0" y="0" z="0"/></vertices><triangles/></mesh></object><object id="2" type="model"><components><component objectid="1"/></components></object></resources><build><item objectid="2" transform="1 0 0 0 1 0 0 0 1 ${x} 20 0"/></build></model>`) });
+  const result = mergePlate3mf({ sources: [source(10), source(40)], maximumUncompressedBytes: 100000 });
+  const xml = strFromU8(unzipSync(result)['3D/3dmodel.model']);
+  assert.match(xml, /<component objectid="1"/); assert.match(xml, /<component objectid="3"/);
+  assert.match(xml, /<item objectid="2" transform="1 0 0 0 1 0 0 0 1 10 20 0"/);
+  assert.match(xml, /<item objectid="4" transform="1 0 0 0 1 0 0 0 1 40 20 0"/);
+  assert.throws(() => mergePlate3mf({ sources: [source(10), source(40)], maximumUncompressedBytes: 500 }));
+});

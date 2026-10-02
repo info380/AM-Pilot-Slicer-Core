@@ -1,9 +1,10 @@
+import { BAMBU_ENGINE_KEY } from './bambu-engine.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import { WorkerError } from './errors.js';
 import { runProcess } from './process.js';
-import { buildTransformed3mf } from './three-mf.js';
+import { buildTransformed3mf, mergePlate3mf } from './three-mf.js';
 import { buildPlateObjectTransform } from './transform.js';
 import { compileObjectOverrides } from './object-overrides.js';
 import { buildSupportPainted3mf, assertSupportPaintRoundtrip } from './support-paint.js';
@@ -24,7 +25,7 @@ const verifyPlateContract = ({ inputSnapshot, effectiveConfiguration, config }) 
       code: 'slicer_input_snapshot_invalid'
     });
   }
-  if (!effectiveConfiguration?.coordinateMapping || !effectiveConfiguration?.prusaConfig) {
+  if (!effectiveConfiguration?.coordinateMapping || !(effectiveConfiguration?.prusaConfig || effectiveConfiguration?.engineAdapter === BAMBU_ENGINE_KEY && effectiveConfiguration?.bambuConfig)) {
     throw new WorkerError('The effective Slicer configuration is incomplete.', {
       code: 'slicer_effective_configuration_invalid'
     });
@@ -91,6 +92,10 @@ export const materializePlateInputs = async ({
     sourceByProjectFileId.set(model.projectFileId, await fs.readFile(normalizedPath));
   }
 
+  const bambu = effectiveConfiguration.engineAdapter === BAMBU_ENGINE_KEY;
+  if (bambu && objects.some(object => object.supportPaint != null || Object.keys(object.printOverrides || {}).length)) {
+    throw new WorkerError('This Bambu revision does not support object overrides or painted supports.', { code: 'slicer_object_overrides_unqualified' });
+  }
   const result = [];
   let totalPlateInputBytes = 0;
   for (let index = 0; index < objects.length; index += 1) {
@@ -144,6 +149,12 @@ export const materializePlateInputs = async ({
     }
     await fs.writeFile(targetPath, transformed, { mode: 0o600 });
     result.push(targetPath);
+  }
+  if (bambu) {
+    const merged = mergePlate3mf({ sources: await Promise.all(result.map(filename => fs.readFile(filename))), maximumUncompressedBytes: config.maximumPlateInputBytes });
+    const filename = path.join(workDir, 'bambu-plate.3mf');
+    await fs.writeFile(filename, merged, { mode: 0o600 });
+    return [filename];
   }
   return result;
 };

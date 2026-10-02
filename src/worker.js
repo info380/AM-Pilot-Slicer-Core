@@ -1,3 +1,4 @@
+import { BAMBU_ENGINE_KEY, BAMBU_CAPABILITY_REVISION, runBambuEngine, verifyBambuStudio } from './bambu-engine.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -90,6 +91,9 @@ const validateClaimIdentity = (claim, config) => {
 export const validateClaim = (claim, config) => {
   validateClaimIdentity(claim, config);
   const { run } = claim;
+  if (config.engineKey === BAMBU_ENGINE_KEY && run.capabilityRevisionId !== BAMBU_CAPABILITY_REVISION) {
+    throw new WorkerError('Bambu capability does not match this worker release.', { code: 'slicer_worker_claim_invalid' });
+  }
   const models = Array.isArray(claim.inputSnapshot.models) ? claim.inputSnapshot.models : [];
   const objects = Array.isArray(claim.inputSnapshot.plate?.objects) ? claim.inputSnapshot.plate.objects : [];
   if (objects.some(object => Object.keys(object.printOverrides || {}).length) && run.capabilityRevisionId !== CAPABILITY_REVISION_ID) {
@@ -156,13 +160,14 @@ const completeWithRetry = async ({
   gcodePath,
   manifestPath,
   toolpathPreviewPath,
+  printArchivePath,
   signal,
   config
 }) => {
   let delayMs = 1_000;
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
-      return await api.complete({ run, leaseToken, gcodePath, manifestPath, toolpathPreviewPath, signal });
+      return await api.complete({ run, leaseToken, gcodePath, manifestPath, toolpathPreviewPath, printArchivePath, signal });
     } catch (error) {
       if (!error.retryable || attempt === 3) throw error;
       await sleep(delayMs, signal);
@@ -268,7 +273,7 @@ export const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal })
       signal: jobSignal,
       onProgress: sendProgress
     });
-    const rawResult = await runSlicerEngine({
+    const rawResult = await (config.engineKey === BAMBU_ENGINE_KEY ? runBambuEngine : runSlicerEngine)({
       plateInputPaths,
       effectiveConfiguration,
       workDir,
@@ -278,7 +283,7 @@ export const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal })
     });
     const result = Object.freeze({
       ...rawResult,
-      metrics: enrichResultMetrics(rawResult.metrics, effectiveConfiguration)
+      metrics: config.engineKey === BAMBU_ENGINE_KEY ? rawResult.metrics : enrichResultMetrics(rawResult.metrics, effectiveConfiguration)
     });
     await sendProgress({
       stage: 'compiling-preview',
@@ -319,6 +324,7 @@ export const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal })
       run,
       leaseToken: lease.token,
       gcodePath: result.gcodePath,
+      printArchivePath: result.archivePath,
       manifestPath,
       toolpathPreviewPath: toolpathPreview.path,
       signal: jobSignal,
@@ -356,7 +362,8 @@ export const runWorker = async ({ config, fetchImpl = globalThis.fetch, signal =
   await fs.mkdir(config.workRoot, { recursive: true, mode: 0o700 });
   await fs.chmod(config.workRoot, 0o700);
   const api = new SlicerWorkerApiClient(config, { fetchImpl });
-  const engineVersion = await verifyPrusaSlicer(config);
+  const geometryEngineVersion = await verifyPrusaSlicer(config);
+  const engineVersion = config.engineKey === BAMBU_ENGINE_KEY ? await verifyBambuStudio(config) : geometryEngineVersion;
   const health = await api.health();
   if (health?.ready !== true || Number(health?.workerProtocolVersion) !== config.protocolVersion) {
     throw new WorkerError('The AM Pilot API does not support this worker protocol.', {

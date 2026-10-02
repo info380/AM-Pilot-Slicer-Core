@@ -1,3 +1,4 @@
+import { BAMBU_ENGINE_KEY, BAMBU_STUDIO_VERSION } from './bambu-engine.js';
 import fs from 'node:fs';
 
 import {
@@ -86,6 +87,10 @@ export const loadWorkerConfig = (environment = process.env, options = {}) => {
       code: 'slicer_worker_configuration_invalid'
     });
   }
+  const engineKey = String(environment.SLICER_ENGINE_KEY || ENGINE_KEY).trim();
+  if (![ENGINE_KEY, BAMBU_ENGINE_KEY].includes(engineKey)) throw new WorkerError('Unsupported slicing engine.', { code: 'slicer_worker_configuration_invalid' });
+  const bambuStudioCommand = engineKey === BAMBU_ENGINE_KEY ? required(environment, 'BAMBU_STUDIO_CMD') : null;
+  if (bambuStudioCommand && (!bambuStudioCommand.startsWith('/') || !fs.existsSync(bambuStudioCommand))) throw new WorkerError('BAMBU_STUDIO_CMD must identify an existing absolute executable path.', { code: 'slicer_worker_configuration_invalid' });
   const workRoot = String(environment.SLICER_WORK_ROOT || '/tmp/am-pilot-slicer-worker').trim();
   if (!workRoot.startsWith('/') || workRoot === '/') {
     throw new WorkerError('SLICER_WORK_ROOT must be a dedicated absolute directory.', {
@@ -148,7 +153,11 @@ export const loadWorkerConfig = (environment = process.env, options = {}) => {
     controlToken,
     workerId,
     imageDigest,
-    engineKey: ENGINE_KEY,
+    engineKey,
+    bambuStudioCommand,
+    expectedBambuVersion: engineKey === BAMBU_ENGINE_KEY ? BAMBU_STUDIO_VERSION : null,
+    maximumArchiveBytes: boundedInteger(environment, 'SLICER_MAX_ARCHIVE_BYTES', 134217728, 1048576, 536870912),
+    maximumExpandedArchiveBytes: boundedInteger(environment, 'SLICER_MAX_EXPANDED_ARCHIVE_BYTES', 268435456, 1048576, 1073741824),
     protocolVersion: WORKER_PROTOCOL_VERSION,
     expectedPrusaVersion: PRUSA_SLICER_VERSION,
     prusaSlicerCommand,

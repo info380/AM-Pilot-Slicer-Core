@@ -139,3 +139,39 @@ export const buildTransformed3mf = ({ source, objectTransform, maximumUncompress
     ...metadata
   });
 };
+
+// Combines normalized, transformed geometry into one plate without arranging it.
+// References are rewritten per input; vendor project settings never enter the job.
+export const mergePlate3mf = ({ sources, maximumUncompressedBytes }) => {
+  if (!Array.isArray(sources) || !sources.length) throw new WorkerError('Plate geometry is missing.', { code: 'slicer_source_3mf_invalid' });
+  let nextId = 1, totalBytes = 0;
+  const resources = [], build = [];
+  for (const source of sources) {
+    const xml = readNormalized3mfXml({ source, maximumUncompressedBytes });
+    totalBytes += Buffer.byteLength(xml);
+    if (totalBytes > maximumUncompressedBytes || /<!DOCTYPE|<!ENTITY|\b(?:p:)?path\s*=/i.test(xml)) {
+      throw new WorkerError('Plate geometry exceeds limits or contains external references.', { code: 'slicer_source_3mf_invalid' });
+    }
+    const resourceBody = xml.match(/<resources\b[^>]*>([\s\S]*?)<\/resources\s*>/i)?.[1];
+    const buildBody = xml.match(/<build\b[^>]*>([\s\S]*?)<\/build\s*>/i)?.[1];
+    if (!resourceBody || !buildBody) throw new WorkerError('Normalized plate geometry is incomplete.', { code: 'slicer_source_3mf_invalid' });
+    const objects = [...resourceBody.matchAll(/<object\b[^>]*\bid="([0-9]+)"[^>]*>[\s\S]*?<\/object\s*>/g)];
+    const ids = new Map();
+    for (const object of objects) {
+      if (ids.has(object[1])) throw new WorkerError('Duplicate geometry object ID.', { code: 'slicer_source_3mf_invalid' });
+      ids.set(object[1], String(nextId++));
+    }
+    if (!objects.length) throw new WorkerError('Normalized plate has no objects.', { code: 'slicer_source_3mf_invalid' });
+    const reference = (_match, id) => {
+      if (!ids.has(id)) throw new WorkerError('Missing geometry reference.', { code: 'slicer_source_3mf_invalid' });
+      return `objectid="${ids.get(id)}"`;
+    };
+    for (const object of objects) resources.push(object[0].replace(/(<object\b[^>]*\bid=")[0-9]+"/, `$1${ids.get(object[1])}"`).replace(/\bobjectid="([0-9]+)"/g, reference));
+    const items = [...buildBody.matchAll(/<item\b[^>]*\/>/g)];
+    if (!items.length) throw new WorkerError('Plate contains no placed objects.', { code: 'slicer_source_3mf_invalid' });
+    build.push(...items.map(item => item[0].replace(/\bobjectid="([0-9]+)"/g, reference)));
+  }
+  const model = `<?xml version="1.0" encoding="UTF-8"?><model unit="millimeter" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"><resources>${resources.join('')}</resources><build>${build.join('')}</build></model>`;
+  if (Buffer.byteLength(model) > maximumUncompressedBytes) throw new WorkerError('Assembled plate exceeds its byte limit.', { code: 'slicer_plate_input_size_exceeded' });
+  return zipSync({ '[Content_Types].xml': deterministicEntry(CONTENT_TYPES), '_rels/.rels': deterministicEntry(RELATIONSHIPS), [MODEL_PATH]: deterministicEntry(model) });
+};

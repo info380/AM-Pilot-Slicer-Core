@@ -1,3 +1,4 @@
+import { BAMBU_ARCHIVE_CONTENT_TYPE } from './bambu-engine.js';
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import fs from 'node:fs/promises';
@@ -39,8 +40,9 @@ const safeFilename = (value, fallback) => {
   return result || fallback;
 };
 
-const completionFiles = ({ gcodePath, manifestPath, toolpathPreviewPath, gcodeFilename }) => [
+const completionFiles = ({ gcodePath, manifestPath, toolpathPreviewPath, gcodeFilename, printArchivePath }) => [
   { field: 'gcode', path: gcodePath, filename: gcodeFilename, contentType: GCODE_CONTENT_TYPE },
+  ...(printArchivePath ? [{ field: 'printArchive', path: printArchivePath, filename: 'output.gcode.3mf', contentType: BAMBU_ARCHIVE_CONTENT_TYPE }] : []),
   { field: 'manifest', path: manifestPath, filename: 'manifest.json', contentType: MANIFEST_CONTENT_TYPE },
   {
     field: 'toolpathPreview',
@@ -50,8 +52,8 @@ const completionFiles = ({ gcodePath, manifestPath, toolpathPreviewPath, gcodeFi
   }
 ];
 
-async function* multipartBody({ boundary, gcodePath, manifestPath, toolpathPreviewPath, gcodeFilename }) {
-  const files = completionFiles({ gcodePath, manifestPath, toolpathPreviewPath, gcodeFilename });
+async function* multipartBody({ boundary, gcodePath, manifestPath, toolpathPreviewPath, gcodeFilename, printArchivePath }) {
+  const files = completionFiles({ gcodePath, manifestPath, toolpathPreviewPath, gcodeFilename, printArchivePath });
   for (const file of files) {
     yield Buffer.from(
       `--${boundary}\r\nContent-Disposition: form-data; name="${file.field}"; filename="${file.filename}"\r\n`
@@ -63,8 +65,8 @@ async function* multipartBody({ boundary, gcodePath, manifestPath, toolpathPrevi
   yield Buffer.from(`--${boundary}--\r\n`);
 }
 
-const multipartLength = async ({ boundary, gcodePath, manifestPath, toolpathPreviewPath, gcodeFilename }) => {
-  const files = completionFiles({ gcodePath, manifestPath, toolpathPreviewPath, gcodeFilename });
+const multipartLength = async ({ boundary, gcodePath, manifestPath, toolpathPreviewPath, gcodeFilename, printArchivePath }) => {
+  const files = completionFiles({ gcodePath, manifestPath, toolpathPreviewPath, gcodeFilename, printArchivePath });
   let length = Buffer.byteLength(`--${boundary}--\r\n`);
   for (const file of files) {
     const stat = await fs.stat(file.path);
@@ -241,10 +243,10 @@ export class SlicerWorkerApiClient {
     return targetPath;
   }
 
-  async complete({ run, leaseToken, gcodePath, manifestPath, toolpathPreviewPath, signal = null }) {
+  async complete({ run, leaseToken, gcodePath, manifestPath, toolpathPreviewPath, printArchivePath, signal = null }) {
     const boundary = `am-pilot-slicer-${crypto.randomUUID()}`;
     const gcodeFilename = safeFilename(run.plateName || run.plateId, 'slice') + '.gcode';
-    const length = await multipartLength({ boundary, gcodePath, manifestPath, toolpathPreviewPath, gcodeFilename });
+    const length = await multipartLength({ boundary, gcodePath, manifestPath, toolpathPreviewPath, gcodeFilename, printArchivePath });
     let response;
     try {
       response = await this.fetchImpl(this.url(`runs/${encodePath(run.id)}/complete`), {
@@ -259,7 +261,8 @@ export class SlicerWorkerApiClient {
           gcodePath,
           manifestPath,
           toolpathPreviewPath,
-          gcodeFilename
+          gcodeFilename,
+          printArchivePath
         }))),
         duplex: 'half',
         signal: combineSignal(signal, this.config.jobTimeoutMs),

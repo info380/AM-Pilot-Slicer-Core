@@ -33,6 +33,7 @@ export const buildSliceEvidenceChecksum = ({ run, result }) => {
     },
     effectiveConfigurationChecksumSha256: run.effectiveConfigurationChecksumSha256,
     gcode: result.artifact,
+    ...(result.archiveArtifact ? { printArchive: result.archiveArtifact } : {}),
     metrics: result.metrics,
     warnings: result.warnings
   })).digest('hex');
@@ -64,6 +65,7 @@ export const buildResultManifest = ({ run, engine, result, toolpathPreview, slic
     sliceEvidenceChecksumSha256,
     outputs: Object.freeze({
       gcode: result.artifact,
+      ...(result.archiveArtifact ? { printArchive: result.archiveArtifact } : {}),
       toolpathPreview
     }),
     metrics: result.metrics,
