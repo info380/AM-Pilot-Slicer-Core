@@ -180,6 +180,7 @@ test('keeps the worker process alive while an empty queue is being polled', asyn
       workerId: 'worker-liveness-test',
       imageDigest: 'sha256:${'a'.repeat(64)}',
       engineKey: 'fdm.am_pilot_prusa_core',
+      engineKeys: ['fdm.am_pilot_prusa_core'],
       protocolVersion: 1,
       expectedPrusaVersion: '2.9.3',
       prusaSlicerCommand: ${JSON.stringify(prusaCommand)},
