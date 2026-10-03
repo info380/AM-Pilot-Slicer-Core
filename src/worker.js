@@ -358,42 +358,66 @@ export const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal })
   }
 };
 
-export const runWorker = async ({ config, fetchImpl = globalThis.fetch, signal = null }) => {
-  await fs.mkdir(config.workRoot, { recursive: true, mode: 0o700 });
-  await fs.chmod(config.workRoot, 0o700);
-  const api = new SlicerWorkerApiClient(config, { fetchImpl });
-  const geometryEngineVersion = await verifyPrusaSlicer(config);
-  const engineVersion = config.engineKey === BAMBU_ENGINE_KEY ? await verifyBambuStudio(config) : geometryEngineVersion;
-  const health = await api.health();
-  if (health?.ready !== true || Number(health?.workerProtocolVersion) !== config.protocolVersion) {
-    throw new WorkerError('The AM Pilot API does not support this worker protocol.', {
-      code: 'slicer_worker_protocol_unsupported'
-    });
-  }
-  log('info', 'slicer_worker_ready', {
-    workerId: config.workerId,
-    engineKey: config.engineKey,
-    imageDigest: config.imageDigest,
-    protocolVersion: config.protocolVersion,
-    engineVersion
-  });
-
+// All engines share one execution slot. A busy queue cannot starve the next engine.
+export const runWorkerLoop = async ({ engines, signal, execute = runClaim, wait = sleep }) => {
+  let next = 0;
+  let empty = 0;
   let consecutiveErrors = 0;
   while (!signal?.aborted) {
+    const { api, config } = engines[next];
+    next = (next + 1) % engines.length;
     try {
       const claim = await api.claim({ signal });
       consecutiveErrors = 0;
-      if (claim) await runClaim({ claim, api, config, shutdownSignal: signal });
-      else await sleep(config.pollIntervalMs, signal);
+      if (signal?.aborted) break;
+      if (claim) {
+        empty = 0;
+        await execute({ claim, api, config, shutdownSignal: signal });
+      } else if (++empty >= engines.length) {
+        empty = 0;
+        await wait(config.pollIntervalMs, signal);
+      }
     } catch (rawError) {
       if (signal?.aborted) break;
+      empty = 0;
       const error = asWorkerError(rawError);
       consecutiveErrors += 1;
-      log('error', 'slicer_worker_control_error', { failureCode: error.code, retryable: error.retryable });
+      log('error', 'slicer_worker_control_error', { engineKey: config.engineKey, failureCode: error.code, retryable: error.retryable });
       if (!error.retryable) throw error;
       const delay = Math.min(config.retryBackoffMaximumMs, 1_000 * (2 ** Math.min(consecutiveErrors, 5)));
-      await sleep(delay, signal);
+      await wait(delay, signal);
     }
   }
+};
+
+export const runWorker = async ({ config, fetchImpl = globalThis.fetch, signal = null }) => {
+  await fs.mkdir(config.workRoot, { recursive: true, mode: 0o700 });
+  await fs.chmod(config.workRoot, 0o700);
+  const geometryEngineVersion = await verifyPrusaSlicer(config);
+  const engines = [];
+  for (const engineKey of config.engineKeys) {
+    const engineConfig = Object.freeze({ ...config, engineKey });
+    const api = new SlicerWorkerApiClient(engineConfig, { fetchImpl });
+    const engineVersion = engineKey === BAMBU_ENGINE_KEY ? await verifyBambuStudio(engineConfig) : geometryEngineVersion;
+    const health = await api.health();
+    if (health?.ready !== true || Number(health?.workerProtocolVersion) !== config.protocolVersion) {
+      throw new WorkerError('The AM Pilot API does not support this worker protocol.', {
+        code: 'slicer_worker_protocol_unsupported'
+      });
+    }
+    engines.push({ api, config: engineConfig, engineVersion });
+  }
+  // Verify every configured engine before accepting any work.
+  for (const engine of engines) {
+    log('info', 'slicer_worker_ready', {
+      workerId: config.workerId,
+      engineKey: engine.config.engineKey,
+      imageDigest: config.imageDigest,
+      protocolVersion: config.protocolVersion,
+      engineVersion: engine.engineVersion,
+      concurrency: 1
+    });
+  }
+  await runWorkerLoop({ engines, signal });
   log('info', 'slicer_worker_stopped', { workerId: config.workerId });
 };

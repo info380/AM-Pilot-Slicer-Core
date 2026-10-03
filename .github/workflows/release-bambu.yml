@@ -100,13 +100,22 @@ jobs:
           trap 'docker rm -f "${container_id}" >/dev/null 2>&1 || true' EXIT
           docker cp "${container_id}:/opt/bambu/bin/bambu-studio" /tmp/bambu-studio
           test "$(docker inspect --format '{{.Config.User}}' "${IMAGE}@${DIGEST}")" = 'worker'
-          docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --memory 1g --cpus 1 \
+          docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --memory 512m --memory-swap 512m --cpus 0.5 --pids-limit 256 \
             --tmpfs /tmp:rw,nosuid,nodev,size=256m \
             --mount type=bind,src="${GITHUB_WORKSPACE}/test",dst=/worker/test,readonly \
+            --env PRUSA_SLICER_INTEGRATION_CMD=/opt/prusa/bin/prusa-slicer \
             --env BAMBU_STUDIO_INTEGRATION_CMD=/opt/bambu/AppRun \
             --env BAMBU_STUDIO_INTEGRATION_RESOURCES=/opt/bambu/resources/profiles/BBL \
-            "${IMAGE}@${DIGEST}" node --test test/bambu-engine.test.js \
+            "${IMAGE}@${DIGEST}" node --input-type=module --eval '
+              import { spawnSync } from "node:child_process";
+              import { readFileSync } from "node:fs";
+              const result = spawnSync(process.execPath, ["--test", "--test-concurrency=1", "test/bambu-engine.test.js", "test/prusa-integration.test.js", "test/support-paint.test.js", "test/shared-worker.test.js"], { stdio: "inherit" });
+              console.log(JSON.stringify({ memoryPeakBytes: Number(readFileSync("/sys/fs/cgroup/memory.peak", "utf8")), memoryLimitBytes: Number(readFileSync("/sys/fs/cgroup/memory.max", "utf8")), cpuMax: readFileSync("/sys/fs/cgroup/cpu.max", "utf8").trim(), memoryEvents: readFileSync("/sys/fs/cgroup/memory.events", "utf8").trim() }));
+              process.exit(result.status ?? 1);
+            ' \
             > release-evidence/bambu-integration.txt
+          grep -F '# fail 0' release-evidence/bambu-integration.txt
+          grep -F '# skipped 0' release-evidence/bambu-integration.txt
           sha256sum /tmp/bambu-studio > release-evidence/bambu-studio-binary.SHA256
           docker buildx imagetools inspect \
             --format '{{ json .SBOM }}' \
@@ -126,6 +135,7 @@ jobs:
             release-evidence/THIRD_PARTY_NOTICES.md \
             release-evidence/SOURCE_OFFER.md \
             release-evidence/bambu-studio-binary.SHA256 \
+            release-evidence/bambu-integration.txt \
             release-evidence/provenance.slsa.json \
             release-evidence/release-evidence.json \
             release-evidence/sbom.spdx.json \

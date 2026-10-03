@@ -87,9 +87,18 @@ export const loadWorkerConfig = (environment = process.env, options = {}) => {
       code: 'slicer_worker_configuration_invalid'
     });
   }
-  const engineKey = String(environment.SLICER_ENGINE_KEY || ENGINE_KEY).trim();
-  if (![ENGINE_KEY, BAMBU_ENGINE_KEY].includes(engineKey)) throw new WorkerError('Unsupported slicing engine.', { code: 'slicer_worker_configuration_invalid' });
-  const bambuStudioCommand = engineKey === BAMBU_ENGINE_KEY ? required(environment, 'BAMBU_STUDIO_CMD') : null;
+  // Explicit plural configuration enables shared hosting; legacy single-engine deployments remain valid.
+  const engineKeys = String(environment.SLICER_ENGINE_KEYS ?? environment.SLICER_ENGINE_KEY ?? ENGINE_KEY)
+    .split(',').map(value => value.trim());
+  if (engineKeys.length > 2 || new Set(engineKeys).size !== engineKeys.length
+    || engineKeys.some(key => ![ENGINE_KEY, BAMBU_ENGINE_KEY].includes(key))) {
+    throw new WorkerError('SLICER_ENGINE_KEYS must list distinct supported engines.', { code: 'slicer_worker_configuration_invalid' });
+  }
+  if (environment.SLICER_ENGINE_KEYS !== undefined && environment.SLICER_ENGINE_KEY !== undefined) {
+    throw new WorkerError('Configure SLICER_ENGINE_KEYS or SLICER_ENGINE_KEY, not both.', { code: 'slicer_worker_configuration_invalid' });
+  }
+  const engineKey = engineKeys[0];
+  const bambuStudioCommand = engineKeys.includes(BAMBU_ENGINE_KEY) ? required(environment, 'BAMBU_STUDIO_CMD') : null;
   if (bambuStudioCommand && (!bambuStudioCommand.startsWith('/') || !fs.existsSync(bambuStudioCommand))) throw new WorkerError('BAMBU_STUDIO_CMD must identify an existing absolute executable path.', { code: 'slicer_worker_configuration_invalid' });
   const workRoot = String(environment.SLICER_WORK_ROOT || '/tmp/am-pilot-slicer-worker').trim();
   if (!workRoot.startsWith('/') || workRoot === '/') {
@@ -154,8 +163,9 @@ export const loadWorkerConfig = (environment = process.env, options = {}) => {
     workerId,
     imageDigest,
     engineKey,
+    engineKeys: Object.freeze(engineKeys),
     bambuStudioCommand,
-    expectedBambuVersion: engineKey === BAMBU_ENGINE_KEY ? BAMBU_STUDIO_VERSION : null,
+    expectedBambuVersion: engineKeys.includes(BAMBU_ENGINE_KEY) ? BAMBU_STUDIO_VERSION : null,
     maximumArchiveBytes: boundedInteger(environment, 'SLICER_MAX_ARCHIVE_BYTES', 134217728, 1048576, 536870912),
     maximumExpandedArchiveBytes: boundedInteger(environment, 'SLICER_MAX_EXPANDED_ARCHIVE_BYTES', 268435456, 1048576, 1073741824),
     protocolVersion: WORKER_PROTOCOL_VERSION,

@@ -210,3 +210,24 @@ supports, while blockers affect automatically generated supports.
 AM Pilot Slicer Core is licensed under the GNU Affero General Public License,
 version 3. PrusaSlicer is also AGPLv3 and includes work derived from Slic3r.
 See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## Shared Prusa and Bambu worker
+
+The combined image built by `Dockerfile.bambu` can serve both engine queues on
+one deployment. `SLICER_ENGINE_KEYS=fdm.am_pilot_prusa_core,fdm.am_pilot_bambu_core`
+is explicit; do not also set the legacy `SLICER_ENGINE_KEY`. Single-engine images
+and deployments can continue using the legacy setting. Both binaries are verified
+before claiming work. Each claim, lease and output keeps its own engine identity,
+capability and immutable image digest. Register the combined digest separately
+for each engine in AM Pilot before admitting new work to it.
+
+There is one execution slot for the whole process. Polling alternates engine
+queues after each completed job, so a busy queue cannot monopolize the worker.
+An empty queue does not add a poll delay before checking the other queue. Both
+queues share the existing control credential, stable worker ID and workspace
+cleanup. There is no engine substitution, quality reduction or automatic plan
+upgrade. Drain active runs before replacing a deployed digest.
+
+The combined release runs native tests for both engines sequentially under
+512 MiB memory (including swap), 0.5 CPU and one engine thread. Passing the small
+acceptance fixtures does not establish capacity for every production model.
