@@ -48,12 +48,15 @@ jobs:
           test "$(docker inspect --format '{{.Config.User}}' bambu-worker:test)" = worker
           mkdir -p /tmp/bambu-evidence
           docker run --name bambu-test --network none --read-only --cap-drop ALL \
-            --security-opt no-new-privileges --memory 1g --cpus 2 \
+            --security-opt no-new-privileges --memory 512m --memory-swap 512m --cpus 0.5 --pids-limit 256 \
             --tmpfs /tmp:rw,nosuid,nodev,size=256m \
             --mount type=bind,src="${GITHUB_WORKSPACE}/test",dst=/worker/test,readonly \
+            --env PRUSA_SLICER_INTEGRATION_CMD=/opt/prusa/bin/prusa-slicer \
             --env BAMBU_STUDIO_INTEGRATION_CMD=/opt/bambu/AppRun \
             --env BAMBU_STUDIO_INTEGRATION_RESOURCES=/opt/bambu/resources/profiles/BBL \
-            bambu-worker:test node --test test/bambu-engine.test.js | tee /tmp/bambu-evidence/integration.txt
+            bambu-worker:test node --test --test-concurrency=1 test/bambu-engine.test.js test/prusa-integration.test.js test/support-paint.test.js test/shared-worker.test.js | tee /tmp/bambu-evidence/integration.txt
+          grep -F '# fail 0' /tmp/bambu-evidence/integration.txt
+          grep -F '# skipped 0' /tmp/bambu-evidence/integration.txt
           docker inspect --format '{{json .State}}' bambu-test > /tmp/bambu-evidence/container-state.json
           test "$(docker inspect --format '{{.State.OOMKilled}}' bambu-test)" = false
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
