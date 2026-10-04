@@ -41,7 +41,9 @@ const FEATURES = Object.freeze([
   Object.freeze({ id: 10, key: 'skirt_brim', displayName: 'Skirt / brim' }),
   Object.freeze({ id: 11, key: 'gap_fill', displayName: 'Gap fill' }),
   Object.freeze({ id: 12, key: 'wipe_tower', displayName: 'Wipe tower' }),
-  Object.freeze({ id: 13, key: 'custom', displayName: 'Custom' })
+  Object.freeze({ id: 13, key: 'custom', displayName: 'Custom' }),
+  Object.freeze({ id: 14, key: 'ironing', displayName: 'Ironing' }),
+  Object.freeze({ id: 15, key: 'support_ironing', displayName: 'Support ironing' })
 ]);
 
 const FEATURE_BY_COMMENT = new Map([
@@ -63,7 +65,9 @@ const FEATURE_BY_COMMENT = new Map([
   ['skirt / brim', 10],
   ['gap fill', 11],
   ['wipe tower', 12],
-  ['custom', 13]
+  ['custom', 13],
+  ['ironing', 14],
+  ['support ironing', 15]
 ]);
 
 const MOVE_EPSILON = 1e-7;

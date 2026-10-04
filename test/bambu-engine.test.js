@@ -64,6 +64,9 @@ test(`real Bambu engine preserves ${model} ${nozzle} mm archive and preview plac
     presets[kind] = (await resolveBambuPreset({ resourceRoot: resources, kind, name })).settings;
   }
   presets.process.curr_bed_type = 'Textured PEI Plate';
+  presets.process.ironing_type = 'top';
+  presets.process.ironing_flow = '15%';
+  presets.process.ironing_speed = '25';
   const vertices = [[50,60,0],[60,60,0],[50,70,0],[60,70,0],[50,60,5],[60,60,5],[50,70,5],[60,70,5]];
   const triangles = [[0,2,1],[1,2,3],[4,5,6],[5,7,6],[0,1,4],[1,5,4],[2,6,3],[3,6,7],[0,4,2],[2,4,6],[1,3,5],[3,7,5]];
   const xml = '<?xml version="1.0"?><model unit="millimeter" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"><resources><object id="1" type="model"><mesh><vertices>'
@@ -80,6 +83,7 @@ test(`real Bambu engine preserves ${model} ${nozzle} mm archive and preview plac
   assert.ok(result.metrics.estimatedTimeSeconds > 0); assert.ok(result.metrics.layerCount > 0);
   assert.ok(result.metrics.filamentLengthMm > 0);
   const text = await fs.readFile(result.gcodePath, 'utf8');
+  assert.match(text, /; FEATURE: Ironing/);
   const walls = [...text.matchAll(/; FEATURE: Outer wall\n([\s\S]*?)(?=; WIPE_START|; FEATURE:|$)/g)].map(m => m[1]).join('\n');
   const xs = [...walls.matchAll(/\bX(-?[0-9.]+)/g)].map(m => Number(m[1]));
   const ys = [...walls.matchAll(/\bY(-?[0-9.]+)/g)].map(m => Number(m[1]));
@@ -96,6 +100,7 @@ test(`real Bambu engine preserves ${model} ${nozzle} mm archive and preview plac
     gcodeArtifact: result.artifact, sliceEvidenceChecksumSha256: 'a'.repeat(64), summary: result.metrics, maximumBytes: 16777216 });
   assert.equal(preview.header.layerCount, result.metrics.layerCount);
   assert.ok(preview.header.statistics.featureRecordCounts.external_perimeter > 20);
+  assert.ok(preview.header.statistics.featureRecordCounts.ironing > 0);
   assert.equal(preview.header.source.gcodeChecksumSha256, result.artifact.checksumSha256);
   assert.equal(preview.header.interpretation.dialect, 'bambu');
   assert.deepEqual(preview.header.catalogs.tools.map(tool => tool.id), [0]);

@@ -19,3 +19,15 @@ test('pinned Print Settings metadata is complete, typed and attributed', () => {
 test('generator refuses unpinned source trees', () => {
   assert.throws(()=>execFileSync(process.execPath,['scripts/extract-print-settings.js','schemas'],{stdio:'pipe'}));
 });
+
+const bambu = JSON.parse(readFileSync(new URL('../schemas/bambu-print-settings-2.8.2.61.json', import.meta.url)));
+test('native Bambu Print tab catalog preserves typed source definitions',()=>{
+ assert.equal(bambu.fields.length,259);
+ assert.equal(new Set(bambu.fields.map(f=>f.key)).size,bambu.fields.length);
+ assert.equal(bambu.upstream.revision,'926a7192574bcb9b3a732e1ec59a46d79cb45466');
+ for(const field of bambu.fields){
+  assert.ok(field.label&&field.page&&field.group&&field.valueType,field.key);
+  assert.ok(Object.hasOwn(field,'defaultValue'),field.key);
+  if(field.type==='coEnum')assert.ok(field.options.some(o=>o.value===field.defaultValue),field.key);
+ }
+});

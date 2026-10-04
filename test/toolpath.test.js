@@ -180,3 +180,11 @@ test('fails closed when the toolpath artifact exceeds its explicit byte limit', 
     maximumBytes: 128
   }), { code: 'slicer_toolpath_size_invalid' });
 });
+
+test('Ironing paths have explicit feature evidence without changing movement geometry', async t => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'ironing-preview-'));
+  t.after(() => fs.rm(dir,{recursive:true,force:true}));
+  const result = await artifactFor(dir,gcode.replace(';TYPE:External perimeter',';TYPE:Ironing'));
+  assert.ok(result.header.statistics.featureRecordCounts.ironing > 0);
+  assert.equal(result.header.catalogs.features[14].displayName,'Ironing');
+});

@@ -1,7 +1,7 @@
 {
   "schema": "am-pilot-slicer-core-capabilities",
   "version": 1,
-  "capabilityRevisionId": "fdm-prusa-2.9.3-protocol1-r4",
+  "capabilityRevisionId": "fdm-prusa-2.9.3-protocol1-r5",
   "engineKey": "fdm.am_pilot_prusa_core",
   "workerProtocolVersion": 1,
   "engine": {
@@ -39,6 +39,7 @@
   "execution": {
     "concurrency": 1,
     "postProcessingScripts": false,
-    "toolpathPreviewArtifact": true
+    "toolpathPreviewArtifact": true,
+    "ironingFeatureClassification": true
   }
 }
