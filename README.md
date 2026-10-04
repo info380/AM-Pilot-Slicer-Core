@@ -231,3 +231,20 @@ upgrade. Drain active runs before replacing a deployed digest.
 The combined release runs native tests for both engines sequentially under
 512 MiB memory (including swap), 0.5 CPU and one engine thread. Passing the small
 acceptance fixtures does not establish capacity for every production model.
+
+### Native Print settings and Ironing candidate
+
+The versioned Bambu Print-tab catalog contains 259 source fields from
+BambuStudio `926a7192574bcb9b3a732e1ec59a46d79cb45466` (02.08.02.61).
+Regenerate it with `node scripts/extract-bambu-print-settings.js /path/to/BambuStudio/src`.
+The importer verifies both source file checksums before emitting metadata. The
+catalog records compile-time conditions rather than claiming those controls are
+present in the released binary. Firmware, credentials and shell execution are
+not accepted as arbitrary process settings.
+
+Prusa capability `fdm-prusa-2.9.3-protocol1-r5` and Bambu capability
+`fdm-bambu-2.8.2.61-protocol1-r2` add explicit Ironing and Support ironing preview
+features, preserving all previous feature IDs. Native integration tests require
+actual Ironing extrusion and preview records, not only a saved configuration key.
+This candidate does not authorize a worker release or deployment; release and
+qualification remain separate gates.

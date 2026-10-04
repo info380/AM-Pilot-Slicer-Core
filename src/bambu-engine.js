@@ -10,7 +10,7 @@ export const BAMBU_ENGINE_KEY = 'fdm.am_pilot_bambu_core';
 export const BAMBU_STUDIO_VERSION = '02.08.02.61';
 export const BAMBU_UPSTREAM_REVISION = '926a7192574bcb9b3a732e1ec59a46d79cb45466';
 export const BAMBU_ARCHIVE_CONTENT_TYPE = 'application/vnd.ms-package.3dmanufacturing-3dmodel+xml';
-export const BAMBU_CAPABILITY_REVISION = 'fdm-bambu-2.8.2.61-protocol1-r1';
+export const BAMBU_CAPABILITY_REVISION = 'fdm-bambu-2.8.2.61-protocol1-r2';
 const failure = (message, code = 'slicer_bambu_configuration_invalid') => new WorkerError(message, { code });
 const single = value => Array.isArray(value) && value.length === 1 ? value[0] : undefined;
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
