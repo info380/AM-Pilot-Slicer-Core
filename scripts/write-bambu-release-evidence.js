@@ -11,6 +11,7 @@ evidence.source.ubuntuSnapshot='20261101T000000Z';
 evidence.source.nodeVersion='22.23.4';
 evidence.source.nodeImage='node:22.23.4-bookworm-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da';
 evidence.source.brotliPackageVersion='1.1.0-2ubuntu0.1';
+evidence.source.zlibPackageVersion='1:1.3.dfsg-3.1ubuntu2.3';
 evidence.artifacts.bambuStudioSource=evidence.artifacts.prusaSlicerSource.replace(/PrusaSlicer-[^/]+$/,`BambuStudio-${BAMBU_UPSTREAM_REVISION}.tar.gz`);
 evidence.artifacts.binaryChecksum=evidence.artifacts.binaryChecksum.replace('prusa-slicer-binary.SHA256','bambu-studio-binary.SHA256');
 fs.writeFileSync(path,JSON.stringify(evidence,null,2)+'\n');
