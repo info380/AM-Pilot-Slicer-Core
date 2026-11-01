@@ -102,6 +102,25 @@ for(const bambu of [false,true].filter(bambu=>!process.env.FDM_ADVANCED_ENGINE |
  const secondCode=await fs.readFile(second.gcodePath,'utf8'),secondLayers=secondCode.split(bambu?/; CHANGE_LAYER\n/:/;LAYER_CHANGE\n/);
  const low=secondLayers.find(layer=>Number(layer.match(bambu?/; Z_HEIGHT: ([\d.]+)/:/;Z:([\d.]+)/)?.[1])===1.2);
  assert.ok(infillLength(low)<infillLength(layerAt(1.2))/2,'later overlapping modifier has precedence');
+ if(shape==='box'){
+  // A left-half modifier must produce real native ironing only on that half.
+  args.pausePoints=[];args.sources[0].object.modifiers=[{...modifier,name:'Ironed left half',sizeMm:{x:12,y:22,z:12},transform:transform(-5,0,5),printOverrides:{
+   perimeters:4,fill_density:100,fill_pattern:'rectilinear',top_solid_layers:3,bottom_solid_layers:3,
+   top_solid_min_thickness:.6,bottom_solid_min_thickness:.6,thin_walls:false,overhangs:true,
+   top_fill_pattern:'monotonic',bottom_fill_pattern:'monotonic',fill_angle:45,bridge_angle:0,
+   perimeter_speed:27,external_perimeter_speed:23,infill_speed:31,solid_infill_speed:29,top_solid_infill_speed:25,bridge_speed:19,gap_fill_speed:21,
+   ironing:true,ironing_type:'top',ironing_flowrate:12,ironing_spacing:.15,ironing_speed:17,
+   fuzzy_skin:'none',fuzzy_skin_thickness:.15,fuzzy_skin_point_dist:.4,
+   perimeter_extrusion_width:.45,external_perimeter_extrusion_width:.42,infill_extrusion_width:.45,solid_infill_extrusion_width:.45,top_infill_extrusion_width:.42,infill_overlap:'25%',bridge_flow_ratio:1
+  }}];
+  await fs.writeFile(platePath,buildAdvancedPlate3mf(args));
+  const rich=await(bambu?runBambuEngine:runSlicerEngine)({config,workDir,plateInputPaths:[platePath],effectiveConfiguration,pausePoints:[]});
+  const richCode=await fs.readFile(rich.gcodePath,'utf8');let feature='',x=0,y=0;const ironing=[];
+  for(const line of richCode.split('\n')){const match=line.match(/^;(?: FEATURE: |TYPE:)(.+)/);if(match)feature=match[1];if(!/^G[01] /.test(line))continue;const values=Object.fromEntries([...line.matchAll(/([XYE])([-\d.]+)/g)].map(match=>[match[1],Number(match[2])]));x=values.X??x;y=values.Y??y;if(/ironing/i.test(feature)&&values.E>0&&('X'in values||'Y'in values))ironing.push({x,y});}
+  assert(ironing.length>10,'The modifier must generate actual native ironing toolpaths');
+  assert(ironing.every(point=>point.x<=81.5),'Ironing stays inside the selected left-half modifier');
+ }
+
 });
 
 test('assembled plates preserve independent transformed parts, regions and painted triangle identity', () => {
