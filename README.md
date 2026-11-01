@@ -286,3 +286,13 @@ and real-engine tests for every shape, regional infill, and overlap precedence.
 Set both existing native integration command variables for both engines, or
 `FDM_ADVANCED_ENGINE=prusa|bambu` for an explicitly single-engine qualification.
 The release container runs both engines with zero skipped native tests.
+
+### Runtime security patch (0.5.1)
+
+Failed candidate `bambu-v0.2.0` is retained unchanged. Its release scan identified
+CVE-2026-111497 in the old system Brotli package. The shared runtime now uses the
+2026-11-01 Ubuntu snapshot with `libbrotli1=1.1.0-2ubuntu0.1`, and the official
+Node 22.23.4 image pinned by digest. The runtime copies Node from this patched
+stage rather than inheriting an older binary from the geometry image. This also
+covers Node's bundled Brotli fix. Native engine binaries and capability IDs stay
+unchanged; both engine fixtures and the immutable-image scan must pass again.
