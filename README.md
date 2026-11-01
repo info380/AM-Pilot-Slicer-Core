@@ -303,3 +303,14 @@ The next scan confirmed the Brotli fix and identified the one remaining finding,
 CVE-2026-85091 in base-image `zlib1g`. Pin Ubuntu's fixed
 `1:1.3.dfsg-3.1ubuntu2.3` from the same signed snapshot. Candidate
 `bambu-v0.2.1` remains unchanged. Scan severity and reporting remain unchanged.
+
+### Expanded modifier regions (0.5.3 / Bambu 0.2.3)
+
+Prusa r7 and Bambu r4 add native regional ironing, surface patterns, line widths,
+bridge/gap speeds, shell thickness, and fuzzy skin. The common contract accepts
+only settings declared by both pinned PrintRegionConfig classes. Support
+generation remains object-scoped; local enforce/block uses support painting.
+Ironing uses one explicit surface scope; disabled ironing maps to the native off
+value. Boolean metadata is serialized as 0/1. Speed values are absolute mm/s,
+line widths are absolute mm, and infill overlap is a percentage. Old advanced
+preparation capabilities retain their original scope.
