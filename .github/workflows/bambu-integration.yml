@@ -54,7 +54,7 @@ jobs:
             --env PRUSA_SLICER_INTEGRATION_CMD=/opt/prusa/bin/prusa-slicer \
             --env BAMBU_STUDIO_INTEGRATION_CMD=/opt/bambu/AppRun \
             --env BAMBU_STUDIO_INTEGRATION_RESOURCES=/opt/bambu/resources/profiles/BBL \
-            bambu-worker:test node --test --test-concurrency=1 test/bambu-engine.test.js test/prusa-integration.test.js test/support-paint.test.js test/shared-worker.test.js | tee /tmp/bambu-evidence/integration.txt
+            bambu-worker:test node --test --test-concurrency=1 test/bambu-engine.test.js test/prusa-integration.test.js test/support-paint.test.js test/shared-worker.test.js test/advanced-three-mf.test.js | tee /tmp/bambu-evidence/integration.txt
           grep -F '# fail 0' /tmp/bambu-evidence/integration.txt
           grep -F '# skipped 0' /tmp/bambu-evidence/integration.txt
           docker inspect --format '{{json .State}}' bambu-test > /tmp/bambu-evidence/container-state.json

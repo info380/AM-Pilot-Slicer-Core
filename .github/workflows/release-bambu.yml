@@ -109,7 +109,7 @@ jobs:
             "${IMAGE}@${DIGEST}" node --input-type=module --eval '
               import { spawnSync } from "node:child_process";
               import { readFileSync } from "node:fs";
-              const result = spawnSync(process.execPath, ["--test", "--test-concurrency=1", "test/bambu-engine.test.js", "test/prusa-integration.test.js", "test/support-paint.test.js", "test/shared-worker.test.js"], { stdio: "inherit" });
+              const result = spawnSync(process.execPath, ["--test", "--test-concurrency=1", "test/bambu-engine.test.js", "test/prusa-integration.test.js", "test/support-paint.test.js", "test/shared-worker.test.js", "test/advanced-three-mf.test.js"], { stdio: "inherit" });
               console.log(JSON.stringify({ memoryPeakBytes: Number(readFileSync("/sys/fs/cgroup/memory.peak", "utf8")), memoryLimitBytes: Number(readFileSync("/sys/fs/cgroup/memory.max", "utf8")), cpuMax: readFileSync("/sys/fs/cgroup/cpu.max", "utf8").trim(), memoryEvents: readFileSync("/sys/fs/cgroup/memory.events", "utf8").trim() }));
               process.exit(result.status ?? 1);
             ' \

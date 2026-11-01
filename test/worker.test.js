@@ -9,6 +9,7 @@ import test from 'node:test';
 import { WorkerError } from '../src/errors.js';
 import { downloadModelWithRetry, runClaim, validateClaim } from '../src/worker.js';
 import { materializePlateInputs } from '../src/plate.js';
+import { CAPABILITY_REVISION_ID } from '../src/constants.js';
 
 const digest = `sha256:${'a'.repeat(64)}`;
 const config = Object.freeze({
@@ -81,7 +82,7 @@ test('painted claims require the painting capability on both immutable identitie
   const painted = claim();
   painted.inputSnapshot.plate.objects[0].supportPaint = { data: '0:4' };
   assert.throws(() => validateClaim(painted, config), { code: 'slicer_support_paint_capability_required' });
-  painted.run.capabilityRevisionId = painted.engine.capabilityRevisionId = 'fdm-prusa-2.9.3-protocol1-r5';
+  painted.run.capabilityRevisionId = painted.engine.capabilityRevisionId = CAPABILITY_REVISION_ID;
   assert.equal(validateClaim(painted, config), painted);
 });
 
@@ -128,7 +129,7 @@ test('object overrides cannot enter an incompatible claim', () => {
   const overridden = claim();
   overridden.inputSnapshot.plate.objects[0].printOverrides = {perimeters:4};
   assert.throws(() => validateClaim(overridden, config), {code:'slicer_object_override_capability_required'});
-  overridden.run.capabilityRevisionId = overridden.engine.capabilityRevisionId = 'fdm-prusa-2.9.3-protocol1-r5';
+  overridden.run.capabilityRevisionId = overridden.engine.capabilityRevisionId = CAPABILITY_REVISION_ID;
   assert.equal(validateClaim(overridden, config), overridden);
 });
 test('retries transient model downloads without retaining a partial file', async t => {
@@ -253,4 +254,14 @@ test('keeps the worker process alive while an empty queue is being polled', asyn
   assert.equal(processSignal, null);
   assert.match(stdout, /"event":"slicer_worker_stopped"/);
   assert.doesNotMatch(stderr, /unsettled top-level await/i);
+});
+
+test('advanced preparation fails closed on old capabilities and malformed fields', () => {
+  const value=claim();value.inputSnapshot.plate.geometry={heightMm:200};
+  value.inputSnapshot.plate.pausePoints=[{id:'pause',zMm:5.2,message:'Insert nut'}];
+  assert.throws(()=>validateClaim(value,config),{code:'slicer_preparation_capability_required'});
+  value.run.capabilityRevisionId=CAPABILITY_REVISION_ID;value.engine.capabilityRevisionId=CAPABILITY_REVISION_ID;
+  assert.doesNotThrow(()=>validateClaim(value,config));
+  value.inputSnapshot.plate.pausePoints=null;
+  assert.throws(()=>validateClaim(value,config),{code:'slicer_preparation_invalid'});
 });

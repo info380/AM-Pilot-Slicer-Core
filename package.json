@@ -1,6 +1,6 @@
 {
   "name": "@am-pilot/slicer-core-worker",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "private": false,
   "description": "Open-source, headless PrusaSlicer worker for the AM Pilot Slicer worker protocol.",
   "type": "module",
@@ -15,6 +15,6 @@
   },
   "dependencies": {
     "fflate": "0.8.3",
-    "undici": "8.10.2"
+    "undici": "8.12.3"
   }
 }

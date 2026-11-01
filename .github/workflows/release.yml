@@ -112,7 +112,8 @@ jobs:
             --tmpfs /tmp:rw,nosuid,nodev,size=256m \
             --mount type=bind,src="${GITHUB_WORKSPACE}/test",dst=/worker/test,readonly \
             --env PRUSA_SLICER_INTEGRATION_CMD=/opt/prusa/bin/prusa-slicer \
-            "${IMAGE}@${DIGEST}" node --test test/prusa-integration.test.js \
+            --env FDM_ADVANCED_ENGINE=prusa \
+            "${IMAGE}@${DIGEST}" node --test test/prusa-integration.test.js test/advanced-three-mf.test.js \
             > release-evidence/object-overrides-integration.txt
           sha256sum /tmp/prusa-slicer > release-evidence/prusa-slicer-binary.SHA256
           docker buildx imagetools inspect \

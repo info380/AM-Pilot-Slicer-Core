@@ -5,12 +5,13 @@ import { unzipSync, strFromU8 } from 'fflate';
 import { WorkerError } from './errors.js';
 import { runProcess } from './process.js';
 import { inspectGcode, extractWarnings } from './gcode.js';
+import { normalizeFdmPausePoints } from './preparation-contract.js';
 
 export const BAMBU_ENGINE_KEY = 'fdm.am_pilot_bambu_core';
 export const BAMBU_STUDIO_VERSION = '02.08.02.61';
 export const BAMBU_UPSTREAM_REVISION = '926a7192574bcb9b3a732e1ec59a46d79cb45466';
 export const BAMBU_ARCHIVE_CONTENT_TYPE = 'application/vnd.ms-package.3dmanufacturing-3dmodel+xml';
-export const BAMBU_CAPABILITY_REVISION = 'fdm-bambu-2.8.2.61-protocol1-r2';
+export const BAMBU_CAPABILITY_REVISION = 'fdm-bambu-2.8.2.61-protocol1-r3';
 const failure = (message, code = 'slicer_bambu_configuration_invalid') => new WorkerError(message, { code });
 const single = value => Array.isArray(value) && value.length === 1 ? value[0] : undefined;
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -113,13 +114,23 @@ export const inspectBambuOutput = ({ bytes, machine, filament, maximumArchiveByt
     platePath: plates[0] };
 };
 
-export const runBambuEngine = async ({ plateInputPaths, effectiveConfiguration, workDir, config, signal, onProgress = async () => {} }) => {
+export const runBambuEngine = async ({ plateInputPaths, effectiveConfiguration, pausePoints = [], workDir, config, signal, onProgress = async () => {} }) => {
   const presets = assertBambuEffectiveConfiguration(effectiveConfiguration);
   // A single geometry package owns all plate objects and their explicit placement.
   if (!Array.isArray(plateInputPaths) || plateInputPaths.length !== 1) {
     throw failure('Bambu slicing requires one assembled plate package.', 'slicer_plate_input_missing');
   }
   const paths = {};
+  const pauses = normalizeFdmPausePoints(pausePoints);
+  if (pauses.length) {
+    if (!presets.machine.machine_pause_gcode?.trim()) throw failure('The printer has no configured pause command.');
+    // The pinned native CLI has an explicit layer-event input. It does not
+    // retain project layer events when loading external preset files.
+    paths.pauses = path.join(workDir, 'pause-events.json');
+    await fs.writeFile(paths.pauses, JSON.stringify({ mode: 'SingleExtruder', gcodes: pauses.map(pause => ({
+      print_z: pause.zMm, type: 'PausePrint', extruder: 1, color: '', extra: pause.message
+    })) }), { mode: 0o600 });
+  }
   for (const kind of ['machine', 'process', 'filament']) {
     paths[kind] = path.join(workDir, `${kind}.json`);
     const settings = { ...presets[kind] };
@@ -130,7 +141,8 @@ export const runBambuEngine = async ({ plateInputPaths, effectiveConfiguration, 
   const processResult = await runProcess({ command: config.bambuStudioCommand,
     args: ['--debug', '2', '--datadir', path.join(workDir, 'bambu-data'), '--arrange', '0', '--orient', '0',
       '--skip-useless-pick', '--min-save', '--load-settings', `${paths.machine};${paths.process}`,
-      '--load-filaments', paths.filament, '--slice', '0', '--export-3mf', 'output.gcode.3mf', '--outputdir', workDir, ...plateInputPaths],
+      '--load-filaments', paths.filament, ...(paths.pauses ? ['--load-custom-gcodes', paths.pauses] : []),
+      '--slice', '0', '--export-3mf', 'output.gcode.3mf', '--outputdir', workDir, ...plateInputPaths],
     cwd: workDir, timeoutMs: config.jobTimeoutMs, maximumLogBytes: config.maximumLogBytes, signal });
   await onProgress({ stage: 'validating', progressPercent: 85, message: 'Checking Bambu archive and matching preview evidence.' });
   const archivePath = path.join(workDir, 'output.gcode.3mf');

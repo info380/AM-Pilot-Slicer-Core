@@ -1,4 +1,6 @@
 import { BAMBU_ENGINE_KEY, BAMBU_CAPABILITY_REVISION, runBambuEngine, verifyBambuStudio } from './bambu-engine.js';
+import { assertFdmPlatePreparation, hasFdmAdvancedPreparation } from './preparation-contract.js';
+import { verifyNativePauseEvents } from './pause-verification.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -96,6 +98,11 @@ export const validateClaim = (claim, config) => {
   }
   const models = Array.isArray(claim.inputSnapshot.models) ? claim.inputSnapshot.models : [];
   const objects = Array.isArray(claim.inputSnapshot.plate?.objects) ? claim.inputSnapshot.plate.objects : [];
+  if (Object.hasOwn(claim.inputSnapshot.plate || {}, 'pausePoints') || objects.some(object => Object.hasOwn(object, 'modifiers'))) {
+    assertFdmPlatePreparation(claim.inputSnapshot.plate);
+    if (hasFdmAdvancedPreparation(claim.inputSnapshot.plate) && run.capabilityRevisionId !== (config.engineKey === BAMBU_ENGINE_KEY ? BAMBU_CAPABILITY_REVISION : CAPABILITY_REVISION_ID))
+      throw new WorkerError('Pauses and modifiers require the qualified preparation capability.', { code: 'slicer_preparation_capability_required' });
+  }
   if (objects.some(object => Object.keys(object.printOverrides || {}).length) && run.capabilityRevisionId !== CAPABILITY_REVISION_ID) {
     throw new WorkerError('Object overrides require the qualified per-object capability.', { code: 'slicer_object_override_capability_required' });
   }
@@ -276,6 +283,7 @@ export const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal })
     const rawResult = await (config.engineKey === BAMBU_ENGINE_KEY ? runBambuEngine : runSlicerEngine)({
       plateInputPaths,
       effectiveConfiguration,
+      pausePoints: inputSnapshot.plate.pausePoints || [],
       workDir,
       config,
       signal: jobSignal,
@@ -284,6 +292,10 @@ export const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal })
     const result = Object.freeze({
       ...rawResult,
       metrics: config.engineKey === BAMBU_ENGINE_KEY ? rawResult.metrics : enrichResultMetrics(rawResult.metrics, effectiveConfiguration)
+    });
+    if (inputSnapshot.plate.pausePoints?.length) verifyNativePauseEvents({
+      gcode: await fs.readFile(result.gcodePath, 'utf8'), pausePoints: inputSnapshot.plate.pausePoints,
+      bambu: config.engineKey === BAMBU_ENGINE_KEY
     });
     await sendProgress({
       stage: 'compiling-preview',

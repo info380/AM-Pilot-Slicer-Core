@@ -1,7 +1,7 @@
 {
   "schema": "am-pilot-slicer-core-capabilities",
   "version": 1,
-  "capabilityRevisionId": "fdm-prusa-2.9.3-protocol1-r5",
+  "capabilityRevisionId": "fdm-prusa-2.9.3-protocol1-r6",
   "engineKey": "fdm.am_pilot_prusa_core",
   "workerProtocolVersion": 1,
   "engine": {
@@ -35,6 +35,12 @@
     "nativeFormat": "3mf-object-config",
     "scopeCatalog": "schemas/prusa-object-settings-2.9.3.json",
     "independentInstances": true
+  },
+  "advancedPreparation": {
+    "version": 1,
+    "pausePoints": { "timing": "before-first-layer-at-or-above-height", "maximum": 128, "script": "configured-printer-pause" },
+    "modifiers": { "shapes": ["box", "cylinder", "sphere"], "coordinates": "part-local", "overlapPrecedence": "later-wins", "maximumPerObject": 32, "maximumPerPlate": 256 },
+    "regionSettings": ["perimeters", "fill_density", "fill_pattern", "top_solid_layers", "bottom_solid_layers", "perimeter_speed", "external_perimeter_speed", "infill_speed", "solid_infill_speed", "top_solid_infill_speed"]
   },
   "execution": {
     "concurrency": 1,
