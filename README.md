@@ -296,3 +296,10 @@ Node 22.23.4 image pinned by digest. The runtime copies Node from this patched
 stage rather than inheriting an older binary from the geometry image. This also
 covers Node's bundled Brotli fix. Native engine binaries and capability IDs stay
 unchanged; both engine fixtures and the immutable-image scan must pass again.
+
+### Remaining base-package patch (0.5.2)
+
+The next scan confirmed the Brotli fix and identified the one remaining finding,
+CVE-2026-85091 in base-image `zlib1g`. Pin Ubuntu's fixed
+`1:1.3.dfsg-3.1ubuntu2.3` from the same signed snapshot. Candidate
+`bambu-v0.2.1` remains unchanged. Scan severity and reporting remain unchanged.

@@ -129,3 +129,5 @@ assert.equal((sharedRuntime.match(/20261101T000000Z/g) || []).length, 6);
 const sharedEvidence = fs.readFileSync(new URL('./write-bambu-release-evidence.js', import.meta.url), 'utf8');
 assert.match(sharedEvidence, /ubuntuSnapshot='20261101T000000Z'/);
 assert.match(sharedEvidence, /nodeVersion='22\.23\.4'/);
+
+assert.match(sharedRuntime, /zlib1g=1:1\.3\.dfsg-3\.1ubuntu2\.3/);
