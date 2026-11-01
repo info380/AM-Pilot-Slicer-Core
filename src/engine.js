@@ -51,7 +51,9 @@ export const runSlicerEngine = async ({
     command: config.prusaSlicerCommand,
     args: [
       '--export-gcode',
-      '--merge',
+      // Native merge reconstructs Model and discards planned layer events.
+      // An assembled advanced plate is already one model package.
+      ...(plateInputPaths.length > 1 ? ['--merge'] : []),
       '--dont-arrange',
       '--no-ensure-on-bed',
       '--config-compatibility', 'disable',

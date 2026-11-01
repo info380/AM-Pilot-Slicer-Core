@@ -11,12 +11,12 @@ import {
 const MODEL_PATH = '3D/3dmodel.model';
 const MAXIMUM_ARCHIVE_ENTRIES = 128;
 const FIXED_ZIP_TIME = new Date('1980-01-01T00:00:00.000Z');
-const CONTENT_TYPES = `<?xml version="1.0" encoding="UTF-8"?>
+export const CONTENT_TYPES = `<?xml version="1.0" encoding="UTF-8"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
   <Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/>
 </Types>`;
-const RELATIONSHIPS = `<?xml version="1.0" encoding="UTF-8"?>
+export const RELATIONSHIPS = `<?xml version="1.0" encoding="UTF-8"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
   <Relationship Target="/${MODEL_PATH}" Id="rel-1" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/>
 </Relationships>`;

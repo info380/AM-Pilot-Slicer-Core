@@ -334,7 +334,8 @@ jobs:
             --tmpfs /tmp:rw,nosuid,nodev,size=384m,mode=1777 \
             --mount type=bind,source="${GITHUB_WORKSPACE}/test",target=/worker/test,readonly \
             --env PRUSA_SLICER_INTEGRATION_CMD=/opt/prusa/bin/prusa-slicer \
-            --entrypoint node "${IMAGE}" --test --test-reporter=tap /worker/test/support-paint.test.js \
+            --env FDM_ADVANCED_ENGINE=prusa \
+            --entrypoint node "${IMAGE}" --test --test-reporter=tap /worker/test/support-paint.test.js /worker/test/advanced-three-mf.test.js \
             | tee "${output_dir}/native-paint-tests.tap"
           grep -Fx '# skipped 0' "${output_dir}/native-paint-tests.tap"
           grep -Fx '# fail 0' "${output_dir}/native-paint-tests.tap"

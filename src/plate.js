@@ -1,3 +1,5 @@
+import {hasFdmAdvancedPreparation,assertFdmPlatePreparation} from './preparation-contract.js';
+import {buildAdvancedPlate3mf} from './advanced-three-mf.js';
 import { BAMBU_ENGINE_KEY } from './bambu-engine.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -96,6 +98,9 @@ export const materializePlateInputs = async ({
   if (bambu && objects.some(object => object.supportPaint?.data || Object.keys(object.printOverrides || {}).length)) {
     throw new WorkerError('This Bambu revision does not support object overrides or painted supports.', { code: 'slicer_object_overrides_unqualified' });
   }
+  const advanced=hasFdmAdvancedPreparation(inputSnapshot.plate);
+  if(advanced)assertFdmPlatePreparation(inputSnapshot.plate);
+  const preparedSources=[];
   const result = [];
   let totalPlateInputBytes = 0;
   for (let index = 0; index < objects.length; index += 1) {
@@ -131,6 +136,7 @@ export const materializePlateInputs = async ({
       transform: object.transform,
       coordinateMapping: effectiveConfiguration.coordinateMapping
     });
+    if(advanced){preparedSources.push({source,object,objectTransform});continue;}
     const targetPath = path.join(
       workDir,
       `plate-${String(index + 1).padStart(4, '0')}-${safeSegment(object.id, 'object')}.3mf`
@@ -149,6 +155,12 @@ export const materializePlateInputs = async ({
     }
     await fs.writeFile(targetPath, transformed, { mode: 0o600 });
     result.push(targetPath);
+  }
+  if(advanced){
+    const prepared=buildAdvancedPlate3mf({sources:preparedSources,pausePoints:inputSnapshot.plate.pausePoints||[],bambu,
+      pauseGcode:bambu?effectiveConfiguration.bambuConfig.machine.machine_pause_gcode:effectiveConfiguration.prusaConfig.pause_print_gcode,
+      maximumUncompressedBytes:config.maximumPlateInputBytes});
+    const filename=path.join(workDir,'prepared-plate.3mf');await fs.writeFile(filename,prepared,{mode:0o600});return [filename];
   }
   if (bambu) {
     const merged = mergePlate3mf({ sources: await Promise.all(result.map(filename => fs.readFile(filename))), maximumUncompressedBytes: config.maximumPlateInputBytes });

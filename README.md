@@ -248,3 +248,41 @@ features, preserving all previous feature IDs. Native integration tests require
 actual Ironing extrusion and preview records, not only a saved configuration key.
 This candidate does not authorize a worker release or deployment; release and
 qualification remain separate gates.
+
+## Planned pauses and modifier regions (0.5.0)
+
+The immutable plate snapshot accepts `pausePoints` and per-object `modifiers`
+under the version 1 preparation contract in `src/preparation-contract.js`.
+They require Prusa capability `fdm-prusa-2.9.3-protocol1-r6` or Bambu capability
+`fdm-bambu-2.8.2.61-protocol1-r3`. Older capabilities cannot consume these fields.
+
+A pause is `{id, zMm, message}`. Its height is measured from the build plate;
+the native engine pauses before the first printed layer at or above that height.
+The printer profile must supply its native pause script (`pause_print_gcode` for
+Prusa/Klipper, `machine_pause_gcode` for Bambu). No generic pause command or custom
+G-code from a note is substituted. The worker verifies actual native pause events
+before publishing output. Missing events, heights above the printed model, and
+multiple events that cannot be represented at a layer fail closed. A saved pause
+is not a live printer command; an operator resumes the printer after the task.
+
+Each modifier has an ID, name, `shape` (`box`, `cylinder`, or `sphere`), positive
+`sizeMm` XYZ dimensions, a part-local XYZ `transform`, and `printOverrides`.
+A cylinder's axis is local Z; sphere dimensions allow an ellipsoid. Parent part
+transforms also transform its modifier volumes. Modifiers are native non-printable
+regions. Later overlapping modifiers take precedence; editing retains order.
+Region settings cover wall count, infill density/pattern, top/bottom solid layers,
+and the five common wall/infill/surface speeds. Speeds are positive absolute mm/s.
+Hardware settings, scripts, and unsupported engine-specific settings are rejected.
+Limits are 128 pauses, 32 modifiers per object, and 256 modifiers per plate.
+
+Only normalized source geometry, transforms, and supported paint attributes enter
+the assembled native 3MF. Original profiles and scripts are not imported.
+Prusa receives one assembled plate without CLI merge (which discards layer events).
+Bambu receives native modifier parts and `--load-custom-gcodes` layer events so
+externally supplied presets do not discard pauses. G-code is never text-patched.
+
+`test/advanced-three-mf.test.js` runs closed-volume, geometry, pause verification,
+and real-engine tests for every shape, regional infill, and overlap precedence.
+Set both existing native integration command variables for both engines, or
+`FDM_ADVANCED_ENGINE=prusa|bambu` for an explicitly single-engine qualification.
+The release container runs both engines with zero skipped native tests.
