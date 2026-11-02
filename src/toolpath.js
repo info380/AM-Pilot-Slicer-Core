@@ -43,7 +43,9 @@ const FEATURES = Object.freeze([
   Object.freeze({ id: 12, key: 'wipe_tower', displayName: 'Wipe tower' }),
   Object.freeze({ id: 13, key: 'custom', displayName: 'Custom' }),
   Object.freeze({ id: 14, key: 'ironing', displayName: 'Ironing' }),
-  Object.freeze({ id: 15, key: 'support_ironing', displayName: 'Support ironing' })
+  Object.freeze({ id: 15, key: 'support_ironing', displayName: 'Support ironing' }),
+  Object.freeze({ id: 16, key: 'floating_vertical_shell', displayName: 'Floating vertical shell' }),
+  Object.freeze({ id: 17, key: 'support_transition', displayName: 'Support transition' })
 ]);
 
 const FEATURE_BY_COMMENT = new Map([
@@ -67,7 +69,9 @@ const FEATURE_BY_COMMENT = new Map([
   ['wipe tower', 12],
   ['custom', 13],
   ['ironing', 14],
-  ['support ironing', 15]
+  ['support ironing', 15],
+  ['floating vertical shell', 16],
+  ['support transition', 17]
 ]);
 
 const MOVE_EPSILON = 1e-7;
@@ -292,8 +296,10 @@ export const compileProductionToolpath = async ({
     includePoint(currentLayer.boundsMm, record.end);
     includePoint(bounds, record.start);
     includePoint(bounds, record.end);
-    includeRange(speedRange, record.speedMmPerS);
-    if (record.moveKind === 1) includeRange(flowRange, record.volumetricFlowMm3PerS);
+    if (record.moveKind === 1) {
+      includeRange(speedRange, record.speedMmPerS);
+      includeRange(flowRange, record.volumetricFlowMm3PerS);
+    }
     moveRecordCounts[MOVE_KINDS[record.moveKind].key] += 1;
     featureRecordCounts[FEATURES[record.featureKind]?.key || 'unknown'] += 1;
     tools.add(record.toolIndex);

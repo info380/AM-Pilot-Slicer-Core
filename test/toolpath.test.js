@@ -188,3 +188,18 @@ test('Ironing paths have explicit feature evidence without changing movement geo
   assert.ok(result.header.statistics.featureRecordCounts.ironing > 0);
   assert.equal(result.header.catalogs.features[14].displayName,'Ironing');
 });
+
+test('native shell and support-transition roles retain their identity and travel does not widen extrusion speed', async t => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'native-roles-preview-'));
+  t.after(() => fs.rm(dir,{recursive:true,force:true}));
+  const source = gcode.replace(';TYPE:External perimeter',';TYPE:Floating vertical shell')
+    .replace(';TYPE:Internal infill',';TYPE:Support transition')
+    .replace('G1 X110 Y105 F600','G1 X110 Y105 F18000');
+  const result = await artifactFor(dir, source);
+  assert.equal(result.header.statistics.featureRecordCounts.floating_vertical_shell, 5);
+  assert.ok(result.header.statistics.featureRecordCounts.support_transition > 0);
+  assert.equal(result.header.statistics.featureRecordCounts.unknown, 0);
+  assert.deepEqual(result.header.statistics.ranges.speedMmPerS, { minimum:20, maximum:30 });
+  assert.equal(result.header.catalogs.features[16].displayName, 'Floating vertical shell');
+  assert.equal(result.header.catalogs.features[17].displayName, 'Support transition');
+});
