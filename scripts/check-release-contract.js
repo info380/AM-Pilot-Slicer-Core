@@ -131,3 +131,11 @@ assert.match(sharedEvidence, /ubuntuSnapshot='20261101T000000Z'/);
 assert.match(sharedEvidence, /nodeVersion='22\.23\.4'/);
 
 assert.match(sharedRuntime, /zlib1g=1:1\.3\.dfsg-3\.1ubuntu2\.3/);
+
+const bambuRelease=fs.readFileSync(new URL('../.github/workflows/release-bambu.yml',import.meta.url),'utf8');
+assert.match(bambuRelease,/skip-setup-trivy: true/);
+assert.match(bambuRelease,/trivy_0\.70\.0_Linux-64bit\.tar\.gz/);
+assert.match(bambuRelease,/8b4376d5d6befe5c24d503f10ff136d9e0c49f9127a4279fd110b727929a5aa9/);
+assert.match(bambuRelease,/sha256sum --check --strict/);
+assert.match(bambuRelease,/severity: CRITICAL,HIGH/);
+assert.match(bambuRelease,/exit-code: '1'/);

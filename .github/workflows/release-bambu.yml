@@ -67,9 +67,23 @@ jobs:
           IMAGE: ${{ steps.image.outputs.name }}
           DIGEST: ${{ steps.build.outputs.digest }}
         run: cosign sign --yes "${IMAGE}@${DIGEST}"
+      - name: Install checksum-pinned Trivy release
+        run: |
+          scanner_archive="${RUNNER_TEMP}/trivy_0.70.0_Linux-64bit.tar.gz"
+          scanner_directory="${RUNNER_TEMP}/trivy-0.70.0"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            'https://github.com/aquasecurity/trivy/releases/download/v0.70.0/trivy_0.70.0_Linux-64bit.tar.gz' \
+            --output "$scanner_archive"
+          printf '%s  %s\n' '8b4376d5d6befe5c24d503f10ff136d9e0c49f9127a4279fd110b727929a5aa9' "$scanner_archive" | sha256sum --check --strict
+          install -d "$scanner_directory"
+          tar --extract --gzip --file "$scanner_archive" --directory "$scanner_directory" trivy
+          "$scanner_directory/trivy" --version
+          printf '%s\n' "$scanner_directory" >> "$GITHUB_PATH"
       - name: Scan immutable image digest
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          skip-setup-trivy: true
+          version: v0.70.0
           image-ref: ${{ steps.image.outputs.name }}@${{ steps.build.outputs.digest }}
           format: sarif
           output: trivy-results.sarif
