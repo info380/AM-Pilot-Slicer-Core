@@ -1,3 +1,5 @@
+import { runBambuEngine, BAMBU_ENGINE_KEY } from '../src/bambu-engine.js';
+import { resolveBambuPreset } from '../src/bambu-presets.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -149,4 +151,52 @@ test('native worker normalization preserves paint and changes generated support 
   assert.equal(counts.none, 0); assert.ok(counts.enforce > 0); assert.ok(counts.partial > 0); assert.ok(counts.auto > 0); assert.equal(counts.block, 0);
   assert.ok(supportExtrusion.partial > 0 && supportExtrusion.partial < supportExtrusion.enforce, JSON.stringify(supportExtrusion));
   t.diagnostic(JSON.stringify({ supportSections: counts, supportExtrusion, nativeRoundtrip: true, sourceChecksum: checksum }));
+});
+
+
+test('real Bambu worker applies whole-facet, partial, blocker and linked support paint', {skip:!process.env.BAMBU_STUDIO_INTEGRATION_CMD||!process.env.BAMBU_STUDIO_INTEGRATION_RESOURCES||!process.env.PRUSA_SLICER_INTEGRATION_CMD}, async t=>{
+ const workDir=await fs.mkdtemp(path.join(os.tmpdir(),'bambu-support-paint-'));
+ t.after(()=>process.env.KEEP_FDM_NATIVE_OUTPUT?console.log(workDir):fs.rm(workDir,{recursive:true,force:true}));
+ const sourcePath=path.join(workDir,'source.stl');await fs.writeFile(sourcePath,source);
+ const resourceRoot=process.env.BAMBU_STUDIO_INTEGRATION_RESOURCES;
+ const machine=(await resolveBambuPreset({resourceRoot,kind:'machine',name:'Bambu Lab A1 0.4 nozzle'})).settings;
+ const preset=(await resolveBambuPreset({resourceRoot,kind:'process',name:machine.default_print_profile})).settings;
+ const filament=(await resolveBambuPreset({resourceRoot,kind:'filament',name:'Generic PLA @BBL A1'})).settings;
+ Object.assign(preset,{curr_bed_type:'Textured PEI Plate',enable_support:'1',support_type:'normal(manual)',support_on_build_plate_only:'0',support_remove_small_overhang:'0',support_threshold_angle:'30'});
+ const config={prusaSlicerCommand:process.env.PRUSA_SLICER_INTEGRATION_CMD,bambuStudioCommand:process.env.BAMBU_STUDIO_INTEGRATION_CMD,
+  jobTimeoutMs:120000,maximumLogBytes:262144,maximumNormalizedModelBytes:67108864,maximumTotalNormalizedBytes:134217728,maximumPlateInputBytes:201326592,
+  maximumArchiveBytes:16777216,maximumExpandedArchiveBytes:33554432,maximumGcodeBytes:16777216,engineThreads:1,engineCpuAffinity:process.env.SLICER_TEST_CPU_AFFINITY||'none'};
+ const evidence={};
+ for(const [name,data] of [['none',''],['enforce','12:4\n13:4'],['partial','12:40003'],['auto',''],['block','12:8\n13:8'],['linked','12:4\n13:4']]){
+  const runDir=path.join(workDir,name);await fs.mkdir(runDir);
+  const object={id:'painted',name:'Shelf',definitionId:'linked',fileId:'file',supportPaint:paint(data),placement:{status:'placed'},printOverrides:{},transform:{positionMm:{x:0,y:0,z:0},rotationDeg:{x:0,y:0,z:0},scale:{x:1,y:1,z:1}}};
+  const objects=name==='linked'?[object,{...object,id:'copy',transform:{...object.transform,positionMm:{x:30,y:0,z:0}}}]:[object];
+  const inputSnapshot={schema:'am-pilot-slicer-input-snapshot',version:1,models:[model],plate:{geometry:{heightMm:256},objects}};
+  const effectiveConfiguration={engineAdapter:BAMBU_ENGINE_KEY,coordinateMapping:{projectOrigin:'center',engineBedOrigin:'front_left',translationMm:{x:100,y:100,z:0}},bambuConfig:{version:1,machine,filament,process:{...preset,support_type:['auto','block'].includes(name)?'normal(auto)':'normal(manual)'}}};
+  const paths=await materializePlateInputs({inputSnapshot,effectiveConfiguration,downloadedModels:new Map([['source',sourcePath]]),workDir:runDir,config});
+  const modelXml=xml(await fs.readFile(paths[0]));
+  assert.doesNotMatch(modelXml,/slic3rpe:custom_supports=/);
+  if(data)assert.match(modelXml,/paint_supports=/,'native Bambu paint was retained');
+  if(name==='linked')assert.equal((modelXml.match(/<mesh>/g)||[]).length,1,'linked paint reuses one validated source mesh');
+  const result=await runBambuEngine({plateInputPaths:paths,effectiveConfiguration,workDir:runDir,config});
+  const gcode=await fs.readFile(result.gcodePath,'utf8');
+  let support=false,extrusion=0;const xs=[],ys=[];
+  for(const line of gcode.split('\n')){
+   const feature=/^; FEATURE: (.+)/.exec(line);if(feature)support=/^Support/.test(feature[1]);
+   if(!support||!/^G[01] /.test(line)||!/[XY][-\d.]+/.test(line))continue;
+   const e=/\bE([-\d.]+)/.exec(line),x=/\bX([-\d.]+)/.exec(line),y=/\bY([-\d.]+)/.exec(line);
+   if(e&&Number(e[1])>0){extrusion+=Number(e[1]);if(x)xs.push(Number(x[1]));if(y)ys.push(Number(y[1]));}
+  }
+  evidence[name]={extrusion,segments:xs.length,bounds:xs.length?{minX:Math.min(...xs),maxX:Math.max(...xs),minY:Math.min(...ys),maxY:Math.max(...ys)}:null};
+  if(name==='linked')assert.ok(xs.some(x=>x<115)&&xs.some(x=>x>115),'support is generated under both placed instances');
+ }
+ assert.equal(evidence.none.extrusion,0);
+ assert.ok(evidence.enforce.extrusion>0);
+ assert.ok(evidence.partial.extrusion>0&&evidence.partial.extrusion<evidence.enforce.extrusion,JSON.stringify(evidence));
+ assert.ok(evidence.partial.bounds.maxX<evidence.enforce.bounds.maxX-1,'partial native support remains on the painted source quadrant');
+ assert.ok(evidence.partial.bounds.maxY<evidence.enforce.bounds.maxY-2,'partial paint retains its source orientation');
+ assert.ok(evidence.auto.extrusion>0);
+ assert.equal(evidence.block.extrusion,0);
+ assert.ok(evidence.linked.extrusion>evidence.enforce.extrusion*1.5);
+ t.diagnostic(JSON.stringify(evidence));
 });

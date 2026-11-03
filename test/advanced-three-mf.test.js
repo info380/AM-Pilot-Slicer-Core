@@ -6,7 +6,7 @@ import path from 'node:path';
 import { strToU8, strFromU8, zipSync, unzipSync } from 'fflate';
 import { buildAdvancedPlate3mf } from '../src/advanced-three-mf.js';
 import { modifierGeometry } from '../src/modifier-geometry.js';
-import { buildPlateObjectTransform } from '../src/transform.js';
+import { buildPlateObjectTransform, parse3mfTransform, apply3mfTransform } from '../src/transform.js';
 import { resolveBambuPreset } from '../src/bambu-presets.js';
 import { runBambuEngine, BAMBU_ENGINE_KEY } from '../src/bambu-engine.js';
 import { runSlicerEngine } from '../src/engine.js';
@@ -18,7 +18,7 @@ const cube = modifierGeometry({shape:'box',sizeMm:{x:20,y:20,z:10}});
 const model = `<model unit="millimeter" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"><resources><object id="1" type="model"><mesh><vertices>${cube.vertices.map(v=>`<vertex x="${v.x}" y="${v.y}" z="${v.z+5}"/>`).join('')}</vertices><triangles>${cube.triangles.map(t=>`<triangle v1="${t[0]}" v2="${t[1]}" v3="${t[2]}"/>`).join('')}</triangles></mesh></object></resources><build><item objectid="1"/></build></model>`;
 const source = zipSync({'3D/3dmodel.model':strToU8(model)});
 const modifier = {id:'region-1',name:'Solid lower half',shape:'box',sizeMm:{x:22,y:22,z:5},transform:transform(0,0,2.5),printOverrides:{fill_density:100}};
-const argumentsFor = (bambu,modifiers=[modifier],pauses=[{id:'pause-1',zMm:5.2,message:'Insert part'}]) => ({bambu,pauseGcode:bambu?'M400 U1':'PAUSE',maximumUncompressedBytes:16*1024*1024,pausePoints:pauses,sources:[{source,object:{name:'Test cube',modifiers},objectTransform:buildPlateObjectTransform({transform:transform(80,80),coordinateMapping:{projectOrigin:'center',engineBedOrigin:'front_left',translationMm:{x:0,y:0,z:0}}})}]});
+const argumentsFor = (bambu,modifiers=[modifier],pauses=[{id:'pause-1',zMm:5.2,message:'Insert part'}]) => ({bambu,pauseGcode:bambu?'M400 U1':'PAUSE',maximumUncompressedBytes:16*1024*1024,maximumSourceUncompressedBytes:16*1024*1024,pausePoints:pauses,sources:[{source,object:{name:'Test cube',modifiers},objectTransform:buildPlateObjectTransform({transform:transform(80,80),coordinateMapping:{projectOrigin:'center',engineBedOrigin:'front_left',translationMm:{x:0,y:0,z:0}}})}]});
 const textEntries = bytes => Object.fromEntries(Object.entries(unzipSync(bytes)).map(([name,bytes])=>[name,strFromU8(bytes)]));
 const infillLength = layer => {
  let feature='',x=0,y=0,length=0;
@@ -69,7 +69,7 @@ for(const bambu of [false,true].filter(bambu=>!process.env.FDM_ADVANCED_ENGINE |
  const workDir=await fs.mkdtemp(path.join(os.tmpdir(),`fdm-advanced-${bambu?'bambu':'prusa'}-`));
  if(process.env.KEEP_FDM_NATIVE_OUTPUT)process.stdout.write(`Native output: ${workDir}\n`);
  t.after(()=>process.env.KEEP_FDM_NATIVE_OUTPUT?undefined:fs.rm(workDir,{recursive:true,force:true}));
- const config={bambuStudioCommand:bambuCommand,prusaSlicerCommand:prusaCommand,workRoot:workDir,jobTimeoutMs:120000,requestTimeoutMs:30000,maximumLogBytes:262144,maximumArchiveBytes:16777216,maximumExpandedArchiveBytes:33554432,maximumGcodeBytes:16777216,engineThreads:1};
+ const config={bambuStudioCommand:bambuCommand,prusaSlicerCommand:prusaCommand,workRoot:workDir,jobTimeoutMs:120000,requestTimeoutMs:30000,maximumLogBytes:262144,maximumArchiveBytes:16777216,maximumExpandedArchiveBytes:33554432,maximumGcodeBytes:16777216,engineThreads:1,engineCpuAffinity:process.env.SLICER_TEST_CPU_AFFINITY||'none'};
  let effectiveConfiguration;
  if(bambu){
   const machine=(await resolveBambuPreset({resourceRoot:resources,kind:'machine',name:'Bambu Lab A1 0.4 nozzle'})).settings;
@@ -131,12 +131,88 @@ test('assembled plates preserve independent transformed parts, regions and paint
   args.sources.push({...args.sources[0],source,object:{name:'Second',modifiers:[]},objectTransform:buildPlateObjectTransform({transform:transform(130,80),coordinateMapping:{projectOrigin:'center',engineBedOrigin:'center',translationMm:{x:0,y:0,z:0}}})});
   const files=textEntries(buildAdvancedPlate3mf(args)),xml=files['3D/3dmodel.model'];
   assert.equal((xml.match(/<item objectid=/g)||[]).length,2);
-  assert.match(xml,/paint_supports="1"/);
-  assert.match(xml,/<vertex x="80" y="60" z="0"/,'parent rotation and nonuniform scale apply to source geometry');
+  if (bambu) assert.doesNotMatch(xml,/paint_supports=/,'Unowned source annotations must not become Bambu paint');
+  else assert.match(xml,/paint_supports="1"/);
+  if (bambu) {
+   const local = /<vertex x="([^"]+)" y="([^"]+)" z="([^"]+)"/.exec(xml);
+   const matrix = parse3mfTransform(/<item objectid="1" transform="([^"]+)"/.exec(xml)[1]);
+   assert.deepEqual(apply3mfTransform({x:Number(local[1]),y:Number(local[2]),z:Number(local[3])},matrix),{x:80,y:60,z:0});
+  } else assert.match(xml,/<vertex x="80" y="60" z="0"/,'parent rotation and nonuniform scale apply to source geometry');
   assert.match(files[bambu?'Metadata/model_settings.config':'Metadata/Slic3r_PE_model.config'],/Solid lower half/);
  }
  const overflow=argumentsFor(false);overflow.sources[0].objectTransform[0]=Number.MAX_VALUE;
  assert.throws(()=>buildAdvancedPlate3mf(overflow),/finite|transform/i);
  const cyclic=argumentsFor(false);cyclic.sources[0].source=zipSync({'3D/3dmodel.model':strToU8('<model><resources><object id="1"><components><component objectid="1"/></components></object></resources><build><item objectid="1"/></build></model>')});
  assert.throws(()=>buildAdvancedPlate3mf(cyclic),/recursive/);
+});
+
+
+test('Bambu retains native instances only for matching explicit linked evidence', () => {
+ const make = () => {
+  const args=argumentsFor(true);
+  args.sources[0].object.definitionId='linked';
+  args.sources.push({...args.sources[0],object:structuredClone(args.sources[0].object),objectTransform:buildPlateObjectTransform({transform:transform(130,80),coordinateMapping:{projectOrigin:'center',engineBedOrigin:'front_left',translationMm:{x:0,y:0,z:0}}})});
+  return args;
+ };
+ const files=textEntries(buildAdvancedPlate3mf(make())),geometry=files['3D/3dmodel.model'];
+ assert.equal((geometry.match(/<mesh>/g)||[]).length,2,'one source mesh and one modifier for both instances');
+ assert.equal((geometry.match(/<item objectid=/g)||[]).length,2);
+ assert.match(geometry,/<component objectid="2"\/><component objectid="3"\/>/);
+ assert.match(geometry,/transform="1 0 0 0 1 0 0 0 1 130 80 0"/);
+ assert.equal((files['Metadata/model_settings.config'].match(/subtype="modifier_part"/g)||[]).length,2,'each native object retains its own region metadata');
+ assert.deepEqual(buildAdvancedPlate3mf(make()),buildAdvancedPlate3mf(make()));
+ for(const change of [
+  entry=>delete entry.object.definitionId,
+  entry=>entry.object.definitionId='detached',
+  entry=>entry.object.modifiers[0].printOverrides.fill_density=30,
+  entry=>entry.object.printOverrides={perimeters:3},
+  entry=>entry.object.supportPaint={data:'0:4'},
+  entry=>entry.source=zipSync({'3D/3dmodel.model':strToU8(model.replace('z="10"','z="11"'))})
+ ]){
+  const args=make();change(args.sources[1]);
+  const text=textEntries(buildAdvancedPlate3mf(args))['3D/3dmodel.model'];
+  assert.equal((text.match(/<mesh>/g)||[]).length,4,'independent evidence must remain independent');
+ }
+ const invalid=make();invalid.sources[1].objectTransform[0]=Infinity;
+ assert.throws(()=>buildAdvancedPlate3mf(invalid),/transform/);
+});
+
+test('real Bambu native instances preserve every placement, scale and independent region', {skip:!bambuCommand||!resources}, async t=>{
+ const workDir=await fs.mkdtemp(path.join(os.tmpdir(),'fdm-native-instances-'));
+ t.after(()=>process.env.KEEP_FDM_NATIVE_OUTPUT?console.log(workDir):fs.rm(workDir,{recursive:true,force:true}));
+ const machine=(await resolveBambuPreset({resourceRoot:resources,kind:'machine',name:'Bambu Lab A1 0.4 nozzle'})).settings;
+ const processPreset=(await resolveBambuPreset({resourceRoot:resources,kind:'process',name:machine.default_print_profile})).settings;
+ const filament=(await resolveBambuPreset({resourceRoot:resources,kind:'filament',name:'Generic PLA @BBL A1'})).settings;
+ Object.assign(processPreset,{curr_bed_type:'Textured PEI Plate',sparse_infill_density:'15%',sparse_infill_pattern:'grid',top_shell_layers:'0',bottom_shell_layers:'0'});
+ const effectiveConfiguration={engineAdapter:BAMBU_ENGINE_KEY,bambuConfig:{version:1,machine,process:processPreset,filament}};
+ const args=argumentsFor(true,[modifier],[]);
+ args.sources=Array.from({length:4},(_,i)=>{
+  const pose=transform(40+i*50,80);
+  if(i===2){pose.rotationDeg.z=90;pose.scale={x:1.2,y:.7,z:1};}
+  return {source,object:{name:'Cube',definitionId:i===3?'detached':'linked',modifiers:[{...modifier,printOverrides:{fill_density:i===3?0:100}}]},objectTransform:buildPlateObjectTransform({transform:pose,coordinateMapping:{projectOrigin:'center',engineBedOrigin:'front_left',translationMm:{x:0,y:0,z:0}}})};
+ });
+ const platePath=path.join(workDir,'plate.3mf');await fs.writeFile(platePath,buildAdvancedPlate3mf(args));
+ const result=await runBambuEngine({plateInputPaths:[platePath],effectiveConfiguration,workDir,config:{bambuStudioCommand:bambuCommand,jobTimeoutMs:120000,maximumLogBytes:262144,maximumArchiveBytes:16777216,maximumExpandedArchiveBytes:33554432,maximumGcodeBytes:16777216,engineThreads:1,engineCpuAffinity:process.env.SLICER_TEST_CPU_AFFINITY||'none'}});
+ const gcode=await fs.readFile(result.gcodePath,'utf8');
+ const layers=gcode.split(/; CHANGE_LAYER\n/),low=layers.find(layer=>/; Z_HEIGHT: 1.2\n/.test(layer));
+ assert.ok(low,'expected lower layer exists');
+ let feature='',x=0,y=0;const walls=[[],[],[],[]],infill=[0,0,0,0];
+ for(const line of low.split('\n')){
+  const label=line.match(/^; FEATURE: (.+)/);if(label)feature=label[1];
+  if(!/^G[01] /.test(line))continue;
+  const v=Object.fromEntries([...line.matchAll(/([XYE])([-\d.]+)/g)].map(m=>[m[1],Number(m[2])]));
+  const nx=v.X??x,ny=v.Y??y,index=Math.round((nx-40)/50);
+  if(index>=0&&index<4&&v.E>0&&('X'in v||'Y'in v)&&Math.abs(nx-(40+index*50))<15&&Math.abs(ny-80)<15){
+   if(feature==='Outer wall')walls[index].push([nx,ny]);
+   if(/infill/i.test(feature))infill[index]+=Math.hypot(nx-x,ny-y);
+  }
+  x=nx;y=ny;
+ }
+ for(const [i,points] of walls.entries()){
+  assert.ok(points.length>=4,`instance ${i} has walls (${points.length})`);
+  const halfX=i===2?7:10,halfY=i===2?12:10,cx=40+i*50;
+  assert.ok(points.every(([x,y])=>x>=cx-halfX-.01&&x<=cx+halfX+.01&&y>=80-halfY-.01&&y<=80+halfY+.01),`instance ${i} retains its transform: ${JSON.stringify(points)}`);
+ }
+ assert.ok(infill[0]>100&&infill[1]>100&&infill[2]>100,'linked modifier follows each instance');
+ assert.ok(infill[3]<infill[0]/4,'detached zero-infill region remains independent');
 });

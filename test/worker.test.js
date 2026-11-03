@@ -265,3 +265,20 @@ test('advanced preparation fails closed on old capabilities and malformed fields
   value.inputSnapshot.plate.pausePoints=null;
   assert.throws(()=>validateClaim(value,config),{code:'slicer_preparation_invalid'});
 });
+
+test('Bambu painting is bound to the exact Bambu worker capability, never the Prusa capability', async()=>{
+ const {BAMBU_ENGINE_KEY,BAMBU_CAPABILITY_REVISION}=await import('../src/bambu-engine.js');
+ const candidate=claim();
+ candidate.run.engineKey=candidate.engine.engineKey=candidate.effectiveConfiguration.engineAdapter=BAMBU_ENGINE_KEY;
+ candidate.run.capabilityRevisionId=candidate.engine.capabilityRevisionId=BAMBU_CAPABILITY_REVISION;
+ candidate.inputSnapshot.plate.objects[0].supportPaint={data:'0:40003'};
+ candidate.effectiveConfiguration.bambuConfig={process:{enable_support:'0'}};
+ const bambuConfig={...config,engineKey:BAMBU_ENGINE_KEY};
+ assert.throws(()=>validateClaim(candidate,bambuConfig),{code:'slicer_support_paint_supports_disabled'});
+ candidate.effectiveConfiguration.bambuConfig.process.enable_support='1';
+ assert.doesNotThrow(()=>validateClaim(candidate,bambuConfig));
+ for(const old of ['fdm-bambu-2.8.2.61-protocol1-r4',CAPABILITY_REVISION_ID]){
+  const other=structuredClone(candidate);other.run.capabilityRevisionId=other.engine.capabilityRevisionId=old;
+  assert.throws(()=>validateClaim(other,bambuConfig),{code:'slicer_worker_claim_invalid'});
+ }
+});

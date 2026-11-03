@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { nativeCpuInvocation } from './native-cpu-affinity.js';
 
 import { WorkerError } from './errors.js';
 
@@ -16,8 +17,11 @@ export const runProcess = async ({
   timeoutMs,
   maximumLogBytes,
   signal,
-  onOutput = null
-}) => await new Promise((resolve, reject) => {
+  onOutput = null,
+  cpuAffinityCount = null
+}) => {
+ const invocation = await nativeCpuInvocation({ command, args, count: cpuAffinityCount });
+ return await new Promise((resolve, reject) => {
   if (signal?.aborted) {
     reject(new WorkerError('Slicing was cancelled.', { code: 'slicer_worker_cancelled' }));
     return;
@@ -27,7 +31,7 @@ export const runProcess = async ({
   // instead of forwarding process.env, which would expose the worker control
   // token and other service secrets to the slicer subprocess.
   const dynamicLibraryPath = String(process.env.LD_LIBRARY_PATH || '').trim();
-  const child = spawn(command, args, {
+  const child = spawn(invocation.command, invocation.args, {
     cwd,
     shell: false,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -94,3 +98,4 @@ export const runProcess = async ({
     ));
   });
 });
+};

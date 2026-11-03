@@ -6,7 +6,7 @@ import path from 'node:path';
 
 import { WorkerError } from './errors.js';
 import { runProcess } from './process.js';
-import { buildTransformed3mf, mergePlate3mf } from './three-mf.js';
+import { buildTransformed3mf } from './three-mf.js';
 import { buildPlateObjectTransform } from './transform.js';
 import { compileObjectOverrides } from './object-overrides.js';
 import { buildSupportPainted3mf, assertSupportPaintRoundtrip } from './support-paint.js';
@@ -95,12 +95,13 @@ export const materializePlateInputs = async ({
   }
 
   const bambu = effectiveConfiguration.engineAdapter === BAMBU_ENGINE_KEY;
-  if (bambu && objects.some(object => object.supportPaint?.data || Object.keys(object.printOverrides || {}).length)) {
-    throw new WorkerError('This Bambu revision does not support object overrides or painted supports.', { code: 'slicer_object_overrides_unqualified' });
+  if (bambu && objects.some(object => Object.keys(object.printOverrides || {}).length)) {
+    throw new WorkerError('This Bambu revision does not support object overrides.', { code: 'slicer_object_overrides_unqualified' });
   }
   const advanced=hasFdmAdvancedPreparation(inputSnapshot.plate);
   if(advanced)assertFdmPlatePreparation(inputSnapshot.plate);
   const preparedSources=[];
+  const paintedSources = new Map();
   const result = [];
   let totalPlateInputBytes = 0;
   for (let index = 0; index < objects.length; index += 1) {
@@ -115,6 +116,9 @@ export const materializePlateInputs = async ({
       throw new WorkerError('A plate object has not been placed.', { code: 'slicer_placement_incomplete' });
     }
     if (object.supportPaint?.data) {
+      const key=JSON.stringify([object.fileId,object.supportPaint]);
+      if (paintedSources.has(key)) source=paintedSources.get(key);
+      else {
       const model = models.find(entry => entry.projectFileId === object.fileId);
       const annotatedPath = path.join(workDir, `paint-source-${index}.3mf`);
       const normalizedPath = path.join(workDir, `paint-normalized-${index}.3mf`);
@@ -131,12 +135,14 @@ export const materializePlateInputs = async ({
       }
       source = await fs.readFile(normalizedPath);
       assertSupportPaintRoundtrip({ before: annotated, after: source, maximumUncompressedBytes: config.maximumNormalizedModelBytes });
+      paintedSources.set(key,source);
+      }
     }
     const objectTransform = buildPlateObjectTransform({
       transform: object.transform,
       coordinateMapping: effectiveConfiguration.coordinateMapping
     });
-    if(advanced){preparedSources.push({source,object,objectTransform});continue;}
+    if(advanced || bambu){preparedSources.push({source,object,objectTransform});continue;}
     const targetPath = path.join(
       workDir,
       `plate-${String(index + 1).padStart(4, '0')}-${safeSegment(object.id, 'object')}.3mf`
@@ -156,17 +162,11 @@ export const materializePlateInputs = async ({
     await fs.writeFile(targetPath, transformed, { mode: 0o600 });
     result.push(targetPath);
   }
-  if(advanced){
+  if(advanced || bambu){
     const prepared=buildAdvancedPlate3mf({sources:preparedSources,pausePoints:inputSnapshot.plate.pausePoints||[],bambu,
       pauseGcode:bambu?effectiveConfiguration.bambuConfig.machine.machine_pause_gcode:effectiveConfiguration.prusaConfig.pause_print_gcode,
-      maximumUncompressedBytes:config.maximumPlateInputBytes});
+      maximumUncompressedBytes:config.maximumPlateInputBytes,maximumSourceUncompressedBytes:config.maximumNormalizedModelBytes});
     const filename=path.join(workDir,'prepared-plate.3mf');await fs.writeFile(filename,prepared,{mode:0o600});return [filename];
-  }
-  if (bambu) {
-    const merged = mergePlate3mf({ sources: await Promise.all(result.map(filename => fs.readFile(filename))), maximumUncompressedBytes: config.maximumPlateInputBytes });
-    const filename = path.join(workDir, 'bambu-plate.3mf');
-    await fs.writeFile(filename, merged, { mode: 0o600 });
-    return [filename];
   }
   return result;
 };
