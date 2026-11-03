@@ -92,3 +92,10 @@ integration paths documented above, and optionally
 It generates its own 16,384-facet torus and measures one and ten linked parts;
 no customer geometry, network service or printer is used. Linux resource
 measurements require the cgroup v2 files used by the release container.
+
+The initial `bambu-v0.3.0` attempt failed before scanning because the scanner
+installer could not resolve its download host (exit 6). Its source tag and
+published build history are retained. The replacement candidate installs the
+same Trivy 0.70.0 binary from its official GitHub release with a pinned SHA-256;
+its HIGH/CRITICAL vulnerability gate and all native-image checks are unchanged.
+No failed tag is moved or reused.
