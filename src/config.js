@@ -100,6 +100,11 @@ export const loadWorkerConfig = (environment = process.env, options = {}) => {
   const engineKey = engineKeys[0];
   const bambuStudioCommand = engineKeys.includes(BAMBU_ENGINE_KEY) ? required(environment, 'BAMBU_STUDIO_CMD') : null;
   if (bambuStudioCommand && (!bambuStudioCommand.startsWith('/') || !fs.existsSync(bambuStudioCommand))) throw new WorkerError('BAMBU_STUDIO_CMD must identify an existing absolute executable path.', { code: 'slicer_worker_configuration_invalid' });
+  const engineCpuAffinity = String(environment.SLICER_ENGINE_CPU_AFFINITY ?? 'none').trim();
+  if (!['none', 'threads'].includes(engineCpuAffinity)
+    || engineCpuAffinity === 'threads' && (process.platform !== 'linux' || !fs.existsSync('/usr/bin/taskset'))) {
+    throw new WorkerError('SLICER_ENGINE_CPU_AFFINITY must be none, or threads on Linux with taskset installed.', { code: 'slicer_worker_configuration_invalid' });
+  }
   const workRoot = String(environment.SLICER_WORK_ROOT || '/tmp/am-pilot-slicer-worker').trim();
   if (!workRoot.startsWith('/') || workRoot === '/') {
     throw new WorkerError('SLICER_WORK_ROOT must be a dedicated absolute directory.', {
@@ -158,6 +163,7 @@ export const loadWorkerConfig = (environment = process.env, options = {}) => {
     });
   }
   return Object.freeze({
+    engineCpuAffinity,
     apiBaseUrl: apiBaseUrl(environment, options),
     controlToken,
     workerId,

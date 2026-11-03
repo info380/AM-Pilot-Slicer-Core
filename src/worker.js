@@ -3,6 +3,7 @@ import { assertFdmPlatePreparation, hasFdmAdvancedPreparation } from './preparat
 import { verifyNativePauseEvents } from './pause-verification.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { performance } from 'node:perf_hooks';
 
 import { SlicerWorkerApiClient } from './api-client.js';
 import {
@@ -106,8 +107,12 @@ export const validateClaim = (claim, config) => {
   if (objects.some(object => Object.keys(object.printOverrides || {}).length) && run.capabilityRevisionId !== CAPABILITY_REVISION_ID) {
     throw new WorkerError('Object overrides require the qualified per-object capability.', { code: 'slicer_object_override_capability_required' });
   }
-  if (objects.some(object => object.supportPaint?.data) && run.capabilityRevisionId !== SUPPORT_PAINT_CAPABILITY) {
+  if (objects.some(object => object.supportPaint?.data) && run.capabilityRevisionId !== (config.engineKey === BAMBU_ENGINE_KEY ? BAMBU_CAPABILITY_REVISION : SUPPORT_PAINT_CAPABILITY)) {
     throw new WorkerError('Painted supports require the qualified annotation capability.', { code: 'slicer_support_paint_capability_required' });
+  }
+  if (config.engineKey === BAMBU_ENGINE_KEY && objects.some(object=>object.supportPaint?.data)
+    && Number(claim.effectiveConfiguration.bambuConfig?.process?.enable_support)!==1) {
+    throw new WorkerError('Painted Bambu runs require support to be enabled.', {code:'slicer_support_paint_supports_disabled'});
   }
   if (
     models.length === 0
@@ -224,6 +229,14 @@ export const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal })
     message: 'Slicer worker claimed the immutable run.'
   };
   let heartbeatActive = false;
+  const timingsMs = {};
+  let stageStarted = performance.now();
+  const finishStage = stage => {
+    const now = performance.now();
+    timingsMs[stage] = Math.round(now - stageStarted);
+    stageStarted = now;
+    log('info', 'slicer_run_stage_completed', { runId: run.id, stage, durationMs: timingsMs[stage] });
+  };
   const sendProgress = async update => {
     progress = { ...progress, ...update };
     await api.progress({
@@ -271,6 +284,7 @@ export const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal })
       });
       downloadedModels.set(model.modelId, targetPath);
     }
+    finishStage('download');
     const plateInputPaths = await materializePlateInputs({
       inputSnapshot,
       effectiveConfiguration,
@@ -280,6 +294,7 @@ export const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal })
       signal: jobSignal,
       onProgress: sendProgress
     });
+    finishStage('preparation');
     const rawResult = await (config.engineKey === BAMBU_ENGINE_KEY ? runBambuEngine : runSlicerEngine)({
       plateInputPaths,
       effectiveConfiguration,
@@ -297,6 +312,7 @@ export const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal })
       gcode: await fs.readFile(result.gcodePath, 'utf8'), pausePoints: inputSnapshot.plate.pausePoints,
       bambu: config.engineKey === BAMBU_ENGINE_KEY
     });
+    finishStage('slicingAndValidation');
     await sendProgress({
       stage: 'compiling-preview',
       progressPercent: 90,
@@ -326,6 +342,7 @@ export const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal })
       manifest,
       maximumBytes: config.maximumManifestBytes
     });
+    finishStage('previewAndManifest');
     await sendProgress({
       stage: 'finalizing',
       progressPercent: 95,
@@ -342,7 +359,8 @@ export const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal })
       signal: jobSignal,
       config
     });
-    log('info', 'slicer_run_completed', { runId: run.id });
+    finishStage('publication');
+    log('info', 'slicer_run_completed', { runId: run.id, timingsMs });
   } catch (rawError) {
     const error = jobSignal.aborted && jobSignal.reason instanceof Error
       ? asWorkerError(jobSignal.reason)

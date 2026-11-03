@@ -77,7 +77,7 @@ test(`real Bambu engine preserves ${model} ${nozzle} mm archive and preview plac
     '[Content_Types].xml': strToU8('<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/></Types>'),
     '_rels/.rels': strToU8('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Target="/3D/3dmodel.model" Id="rel-1" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>') }));
   const config = { bambuStudioCommand: command, workRoot: workDir, requestTimeoutMs: 30000, jobTimeoutMs: 120000,
-    maximumLogBytes: 262144, maximumArchiveBytes: 8388608, maximumExpandedArchiveBytes: 16777216, maximumGcodeBytes: 8388608 };
+    maximumLogBytes: 262144, engineThreads:1, engineCpuAffinity:process.env.SLICER_TEST_CPU_AFFINITY||'none', maximumArchiveBytes: 8388608, maximumExpandedArchiveBytes: 16777216, maximumGcodeBytes: 8388608 };
   await verifyBambuStudio(config);
   const result = await runBambuEngine({ config, workDir, plateInputPaths: [platePath], effectiveConfiguration: { engineAdapter: BAMBU_ENGINE_KEY, bambuConfig: { version: 1, ...presets } } });
   assert.ok(result.metrics.estimatedTimeSeconds > 0); assert.ok(result.metrics.layerCount > 0);
