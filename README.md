@@ -314,3 +314,12 @@ Ironing uses one explicit surface scope; disabled ironing maps to the native off
 value. Boolean metadata is serialized as 0/1. Speed values are absolute mm/s,
 line widths are absolute mm, and infill overlap is a percentage. Old advanced
 preparation capabilities retain their original scope.
+
+## Preview compilation batching
+
+Preview compilation consumes bounded batches from the UTF-8 input stream and
+awaits disk writes only when a record chunk is full. CR, LF, split CRLF, empty
+lines and unterminated final lines retain the original line numbering. Backpressure
+and stream cancellation remain active. Record layout, chunk hashes, output limits,
+Bambu firmware-block handling, arcs, support features and result evidence are
+unchanged; this does not simplify G-code or alter native slicing settings.
