@@ -13,9 +13,9 @@ FROM ${UBUNTU_RUNTIME_IMAGE} AS bambu-download
 COPY --from=dependencies /worker/bootstrap-ca.crt /etc/ssl/certs/ca-certificates.crt
 RUN rm -f /etc/apt/sources.list.d/ubuntu.sources \
     && printf '%s\n' \
-      'deb [check-valid-until=no] http://snapshot.ubuntu.com/ubuntu/20261101T000000Z noble main universe' \
-      'deb [check-valid-until=no] http://snapshot.ubuntu.com/ubuntu/20261101T000000Z noble-updates main universe' \
-      'deb [check-valid-until=no] http://snapshot.ubuntu.com/ubuntu/20261101T000000Z noble-security main universe' > /etc/apt/sources.list \
+      'deb [check-valid-until=no] http://snapshot.ubuntu.com/ubuntu/20261104T000000Z noble main universe' \
+      'deb [check-valid-until=no] http://snapshot.ubuntu.com/ubuntu/20261104T000000Z noble-updates main universe' \
+      'deb [check-valid-until=no] http://snapshot.ubuntu.com/ubuntu/20261104T000000Z noble-security main universe' > /etc/apt/sources.list \
     && apt-get -o Acquire::Check-Valid-Until=false update && apt-get install -y --no-install-recommends ca-certificates curl \
     && curl --fail --location --proto '=https' --tlsv1.2 \
       'https://github.com/bambulab/BambuStudio/releases/download/v02.08.02.61/BambuStudio_ubuntu22.04-v02.08.02.61-20260820225108.AppImage' \
@@ -32,12 +32,13 @@ LABEL org.opencontainers.image.title="AM Pilot Shared Slicer Worker" \
       org.opencontainers.image.bambustudio.revision="926a7192574bcb9b3a732e1ec59a46d79cb45466"
 RUN rm -f /etc/apt/sources.list.d/ubuntu.sources \
     && printf '%s\n' \
-      'deb [check-valid-until=no] http://snapshot.ubuntu.com/ubuntu/20261101T000000Z noble main universe' \
-      'deb [check-valid-until=no] http://snapshot.ubuntu.com/ubuntu/20261101T000000Z noble-updates main universe' \
-      'deb [check-valid-until=no] http://snapshot.ubuntu.com/ubuntu/20261101T000000Z noble-security main universe' > /etc/apt/sources.list \
+      'deb [check-valid-until=no] http://snapshot.ubuntu.com/ubuntu/20261104T000000Z noble main universe' \
+      'deb [check-valid-until=no] http://snapshot.ubuntu.com/ubuntu/20261104T000000Z noble-updates main universe' \
+      'deb [check-valid-until=no] http://snapshot.ubuntu.com/ubuntu/20261104T000000Z noble-security main universe' > /etc/apt/sources.list \
     && apt-get -o Acquire::Check-Valid-Until=false update && apt-get install -y --no-install-recommends \
       ca-certificates util-linux libwebkit2gtk-4.1-0 libglu1-mesa libosmesa6 libsecret-1-0 \
       libgstreamer-plugins-base1.0-0 libpng16-16t64 libgmp10 libbrotli1=1.1.0-2ubuntu0.1 zlib1g=1:1.3.dfsg-3.1ubuntu2.3 \
+      libpcre2-8-0=10.42-4ubuntu2.2 libsoup-3.0-0=3.4.4-5ubuntu0.10 libsoup-3.0-common=3.4.4-5ubuntu0.10 \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --uid 10001 --create-home --shell /usr/sbin/nologin worker
 COPY --from=dependencies /usr/local/bin/node /usr/local/bin/node
