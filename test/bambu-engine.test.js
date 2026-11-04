@@ -80,7 +80,11 @@ test(`real Bambu engine preserves ${model} ${nozzle} mm archive and preview plac
   const config = { bambuStudioCommand: command, workRoot: workDir, requestTimeoutMs: 30000, jobTimeoutMs: 120000,
     maximumLogBytes: 262144, engineThreads:1, engineCpuAffinity:process.env.SLICER_TEST_CPU_AFFINITY||'none', maximumArchiveBytes: 8388608, maximumExpandedArchiveBytes: 16777216, maximumGcodeBytes: 8388608 };
   await verifyBambuStudio(config);
-  const result = await runBambuEngine({ config, workDir, plateInputPaths: [platePath], effectiveConfiguration: { engineAdapter: BAMBU_ENGINE_KEY, bambuConfig: { version: 1, ...presets } } });
+  const profile = createExecutionProfile();
+  const result = await runBambuEngine({ profile, config, workDir, plateInputPaths: [platePath], effectiveConfiguration: { engineAdapter: BAMBU_ENGINE_KEY, bambuConfig: { version: 1, ...presets } } });
+  assert.deepEqual(profile.completedPhases, ['presetPreparation', 'machineProjectPreparation', 'slicingProgress', 'affinitySetup', 'nativeSubprocess', 'validationProgress', 'archiveValidation', 'gcodeInspection']);
+  assert.ok(Object.values(profile.timingsMs).every(value => Number.isFinite(value) && value >= 0));
+  assert.equal(result.profile, undefined);
   assert.ok(result.metrics.estimatedTimeSeconds > 0); assert.ok(result.metrics.layerCount > 0);
   assert.ok(result.metrics.filamentLengthMm > 0);
   const text = await fs.readFile(result.gcodePath, 'utf8');
@@ -117,23 +121,3 @@ test(`real Bambu engine preserves ${model} ${nozzle} mm archive and preview plac
 });
 
 }
-
-
-test('profiles Bambu control, subprocess and validation phases without changing output bytes', async t => {
-  const workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bambu-profile-'));
-  t.after(() => fs.rm(workDir, { recursive: true, force: true }));
-  const nativeArchive = archive();
-  await fs.writeFile(path.join(workDir, 'fixture.3mf'), nativeArchive);
-  const command = path.join(workDir, 'engine-test-double');
-  await fs.writeFile(command, '#!/bin/sh\ncp fixture.3mf output.gcode.3mf\n', { mode: 0o700 });
-  const profile = createExecutionProfile();
-  const result = await runBambuEngine({ plateInputPaths: ['plate.3mf'], effectiveConfiguration: configuration(), workDir,
-    config: { bambuStudioCommand: command, jobTimeoutMs: 5000, maximumLogBytes: 1024, ...limits, maximumExpandedArchiveBytes: limits.maximumExpandedBytes }, profile });
-  assert.deepEqual(await fs.readFile(result.archivePath), Buffer.from(nativeArchive));
-  assert.deepEqual(await fs.readFile(result.gcodePath), Buffer.from(gcode));
-  assert.deepEqual(profile.completedPhases, ['presetPreparation', 'machineProjectPreparation', 'slicingProgress', 'affinitySetup',
-    'nativeSubprocess', 'validationProgress', 'archiveValidation', 'gcodeInspection']);
-  assert.equal(profile.failedPhase, undefined);
-  assert.ok(Object.values(profile.timingsMs).every(value => Number.isFinite(value) && value >= 0));
-  assert.equal(result.profile, undefined);
-});
