@@ -104,6 +104,15 @@ test(`real Bambu engine preserves ${model} ${nozzle} mm archive and preview plac
   assert.equal(preview.header.source.gcodeChecksumSha256, result.artifact.checksumSha256);
   assert.equal(preview.header.interpretation.dialect, 'bambu');
   assert.deepEqual(preview.header.catalogs.tools.map(tool => tool.id), [0]);
+  const custom=structuredClone(presets),motionOverrides={machine_max_acceleration_travel:13000,machine_max_acceleration_x:16000,machine_max_acceleration_y:16000};
+  for(const [key,value] of Object.entries(motionOverrides))custom.machine[key][0]=String(value);
+  custom.process.travel_acceleration='13000';
+  custom.machine.machine_end_gcode+='\n; AM Pilot reviewed machine override';
+  const overrideWork=path.join(workDir,'reviewed-machine');await fs.mkdir(overrideWork);
+  const overridden=await runBambuEngine({config:{...config,maximumPlateInputBytes:16777216},workDir:overrideWork,plateInputPaths:[platePath],effectiveConfiguration:{engineAdapter:BAMBU_ENGINE_KEY,
+    ownership:{machine:{motionOverrides,gcodeOverrides:{machine_end_gcode:custom.machine.machine_end_gcode}}},bambuConfig:{version:1,...custom}}});
+  assert.ok(overridden.metrics.estimatedTimeSeconds>0);
+  assert.match(await fs.readFile(overridden.gcodePath,'utf8'),/AM Pilot reviewed machine override/);
 });
 
 }

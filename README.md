@@ -315,6 +315,12 @@ value. Boolean metadata is serialized as 0/1. Speed values are absolute mm/s,
 line widths are absolute mm, and infill overlap is a percentage. Old advanced
 preparation capabilities retain their original scope.
 
+### Reviewed Bambu machine configurations
+
+Capability `fdm-bambu-2.8.2.61-protocol1-r6` binds explicit motion and G-code overrides to their resolved machine preset. For these jobs only, the pinned Bambu engine first generates an unsliced native project. The worker writes the reviewed settings into that engine-generated project, preserving its geometry, native metadata and generator identity. The final slice loads the same printer rather than entering the CLI's cross-printer conversion path. Installed engine resources and their conversion limits stay unchanged.
+
+The intermediate archive has explicit compressed, expanded, entry-count and settings limits. Both native processes retain the same timeout, cancellation and CPU-affinity controls. The accepted output must retain each reviewed normal-mode limit and script; an engine reduction or replacement fails closed before publication. Separate silent-mode and per-axis limits remain explicit. Jobs with no machine overrides retain their existing preparation path.
+
 ## Preview compilation batching
 
 Preview compilation consumes bounded batches from the UTF-8 input stream and
