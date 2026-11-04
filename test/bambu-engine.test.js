@@ -1,3 +1,4 @@
+import { createExecutionProfile } from '../src/execution-profile.js';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -79,7 +80,11 @@ test(`real Bambu engine preserves ${model} ${nozzle} mm archive and preview plac
   const config = { bambuStudioCommand: command, workRoot: workDir, requestTimeoutMs: 30000, jobTimeoutMs: 120000,
     maximumLogBytes: 262144, engineThreads:1, engineCpuAffinity:process.env.SLICER_TEST_CPU_AFFINITY||'none', maximumArchiveBytes: 8388608, maximumExpandedArchiveBytes: 16777216, maximumGcodeBytes: 8388608 };
   await verifyBambuStudio(config);
-  const result = await runBambuEngine({ config, workDir, plateInputPaths: [platePath], effectiveConfiguration: { engineAdapter: BAMBU_ENGINE_KEY, bambuConfig: { version: 1, ...presets } } });
+  const profile = createExecutionProfile();
+  const result = await runBambuEngine({ profile, config, workDir, plateInputPaths: [platePath], effectiveConfiguration: { engineAdapter: BAMBU_ENGINE_KEY, bambuConfig: { version: 1, ...presets } } });
+  assert.deepEqual(profile.completedPhases, ['presetPreparation', 'machineProjectPreparation', 'slicingProgress', 'affinitySetup', 'nativeSubprocess', 'validationProgress', 'archiveValidation', 'gcodeInspection']);
+  assert.ok(Object.values(profile.timingsMs).every(value => Number.isFinite(value) && value >= 0));
+  assert.equal(result.profile, undefined);
   assert.ok(result.metrics.estimatedTimeSeconds > 0); assert.ok(result.metrics.layerCount > 0);
   assert.ok(result.metrics.filamentLengthMm > 0);
   const text = await fs.readFile(result.gcodePath, 'utf8');

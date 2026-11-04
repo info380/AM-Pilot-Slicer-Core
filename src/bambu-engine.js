@@ -1,3 +1,4 @@
+import { profileExecutionPhase } from './execution-profile.js';
 import {layerGcodeBlock} from './layer-gcode.js';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -125,47 +126,53 @@ export const inspectBambuOutput = ({ bytes, machine, filament, machineOverrides,
     platePath: plates[0] };
 };
 
-export const runBambuEngine = async ({ plateInputPaths, effectiveConfiguration, pausePoints = [], customGcodePoints = [], workDir, config, signal, onProgress = async () => {} }) => {
+export const runBambuEngine = async ({ plateInputPaths, effectiveConfiguration, pausePoints = [], customGcodePoints = [], workDir, config, signal, onProgress = async () => {}, profile = null }) => {
+  const phase = (name, operation) => profileExecutionPhase(profile, name, operation);
   const presets = assertBambuEffectiveConfiguration(effectiveConfiguration);
-  // A single geometry package owns all plate objects and their explicit placement.
-  if (!Array.isArray(plateInputPaths) || plateInputPaths.length !== 1) {
-    throw failure('Bambu slicing requires one assembled plate package.', 'slicer_plate_input_missing');
-  }
   const paths = {};
-  const pauses = normalizeFdmPausePoints(pausePoints),custom=normalizeFdmCustomGcodePoints(customGcodePoints);
-  if (pauses.length||custom.length) {
-    if (pauses.length&&!presets.machine.machine_pause_gcode?.trim()) throw failure('The printer has no configured pause command.');
-    // The pinned native CLI has an explicit layer-event input. It does not
-    // retain project layer events when loading external preset files.
-    paths.pauses = path.join(workDir, 'pause-events.json');
-    await fs.writeFile(paths.pauses, JSON.stringify({ mode: 'SingleExtruder', gcodes: [...pauses.map(pause=>({print_z:pause.zMm,type:'PausePrint',extruder:1,color:'',extra:pause.message})),...custom.map(point=>({print_z:point.zMm,type:'Custom',extruder:1,color:'',extra:layerGcodeBlock(point)}))].sort((a,b)=>a.print_z-b.print_z) }), { mode: 0o600 });
-  }
-  for (const kind of ['machine', 'process', 'filament']) {
-    paths[kind] = path.join(workDir, `${kind}.json`);
-    const settings = { ...presets[kind] };
-    delete settings.post_process; // Not a Bambu preset option; nonempty values are rejected above.
-    await fs.writeFile(paths[kind], JSON.stringify(settings), { mode: 0o600 });
-  }
-  plateInputPaths=[await prepareBambuMachineProject({ownership:effectiveConfiguration.ownership?.machine,presets,paths,sourcePath:plateInputPaths[0],workDir,config,signal,cpuAffinityCount:affinityCount(config)})];
-  await onProgress({ stage: 'slicing', progressPercent: 30, message: 'Generating Bambu toolpaths and the print archive.' });
+  await phase('presetPreparation', async () => {
+    // A single geometry package owns all plate objects and their explicit placement.
+    if (!Array.isArray(plateInputPaths) || plateInputPaths.length !== 1) {
+      throw failure('Bambu slicing requires one assembled plate package.', 'slicer_plate_input_missing');
+    }
+    const pauses = normalizeFdmPausePoints(pausePoints),custom=normalizeFdmCustomGcodePoints(customGcodePoints);
+    if (pauses.length||custom.length) {
+      if (pauses.length&&!presets.machine.machine_pause_gcode?.trim()) throw failure('The printer has no configured pause command.');
+      // The pinned native CLI has an explicit layer-event input. It does not
+      // retain project layer events when loading external preset files.
+      paths.pauses = path.join(workDir, 'pause-events.json');
+      await fs.writeFile(paths.pauses, JSON.stringify({ mode: 'SingleExtruder', gcodes: [...pauses.map(pause=>({print_z:pause.zMm,type:'PausePrint',extruder:1,color:'',extra:pause.message})),...custom.map(point=>({print_z:point.zMm,type:'Custom',extruder:1,color:'',extra:layerGcodeBlock(point)}))].sort((a,b)=>a.print_z-b.print_z) }), { mode: 0o600 });
+    }
+    for (const kind of ['machine', 'process', 'filament']) {
+      paths[kind] = path.join(workDir, `${kind}.json`);
+      const settings = { ...presets[kind] };
+      delete settings.post_process; // Not a Bambu preset option; nonempty values are rejected above.
+      await fs.writeFile(paths[kind], JSON.stringify(settings), { mode: 0o600 });
+    }
+  });
+  plateInputPaths=[await phase('machineProjectPreparation', () => prepareBambuMachineProject({ownership:effectiveConfiguration.ownership?.machine,presets,paths,sourcePath:plateInputPaths[0],workDir,config,signal,cpuAffinityCount:affinityCount(config)}))];
+  await phase('slicingProgress', () => onProgress({ stage: 'slicing', progressPercent: 30, message: 'Generating Bambu toolpaths and the print archive.' }));
   const processResult = await runProcess({ command: config.bambuStudioCommand,
-    cpuAffinityCount: affinityCount(config),
+    cpuAffinityCount: affinityCount(config), profile,
     args: ['--debug', '2', '--datadir', path.join(workDir, 'bambu-data'), '--arrange', '0', '--orient', '0',
       '--skip-useless-pick', '--min-save', '--load-settings', `${paths.machine};${paths.process}`,
       '--load-filaments', paths.filament, ...(paths.pauses ? ['--load-custom-gcodes', paths.pauses] : []),
       '--slice', '0', '--export-3mf', 'output.gcode.3mf', '--outputdir', workDir, ...plateInputPaths],
     cwd: workDir, timeoutMs: config.jobTimeoutMs, maximumLogBytes: config.maximumLogBytes, signal });
-  await onProgress({ stage: 'validating', progressPercent: 85, message: 'Checking Bambu archive and matching preview evidence.' });
+  await phase('validationProgress', () => onProgress({ stage: 'validating', progressPercent: 85, message: 'Checking Bambu archive and matching preview evidence.' }));
   const archivePath = path.join(workDir, 'output.gcode.3mf');
-  const info = await fs.lstat(archivePath);
-  if (!info.isFile() || info.size > config.maximumArchiveBytes) throw failure('Invalid Bambu archive output.', 'slicer_bambu_archive_size_invalid');
-  const inspected = inspectBambuOutput({ bytes: new Uint8Array(await fs.readFile(archivePath)),
-    machine: presets.machine, filament: presets.filament, machineOverrides:effectiveConfiguration.ownership?.machine, maximumArchiveBytes: config.maximumArchiveBytes,
-    maximumExpandedBytes: config.maximumExpandedArchiveBytes, maximumGcodeBytes: config.maximumGcodeBytes });
   const gcodePath = path.join(workDir, 'output.gcode');
-  // Preserve bytes exactly: the displayed toolpaths must describe the archive's G-code.
-  await fs.writeFile(gcodePath, inspected.gcode, { mode: 0o600 });
-  const inspection = await inspectGcode(gcodePath, config.maximumGcodeBytes);
+  const inspected = await phase('archiveValidation', async () => {
+    const info = await fs.lstat(archivePath);
+    if (!info.isFile() || info.size > config.maximumArchiveBytes) throw failure('Invalid Bambu archive output.', 'slicer_bambu_archive_size_invalid');
+    const inspected = inspectBambuOutput({ bytes: new Uint8Array(await fs.readFile(archivePath)),
+      machine: presets.machine, filament: presets.filament, machineOverrides:effectiveConfiguration.ownership?.machine, maximumArchiveBytes: config.maximumArchiveBytes,
+      maximumExpandedBytes: config.maximumExpandedArchiveBytes, maximumGcodeBytes: config.maximumGcodeBytes });
+    // Preserve bytes exactly: the displayed toolpaths must describe the archive's G-code.
+    await fs.writeFile(gcodePath, inspected.gcode, { mode: 0o600 });
+    return inspected;
+  });
+  const inspection = await phase('gcodeInspection', () => inspectGcode(gcodePath, config.maximumGcodeBytes));
   return { gcodePath, archivePath, artifact: inspection.artifact, archiveArtifact: inspected.archiveArtifact,
     metrics: inspection.metrics, warnings: extractWarnings(processResult) };
 };

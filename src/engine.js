@@ -1,3 +1,4 @@
+import { profileExecutionPhase } from './execution-profile.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -30,7 +31,8 @@ export const runSlicerEngine = async ({
   workDir,
   config,
   signal,
-  onProgress = async () => {}
+  onProgress = async () => {},
+  profile = null
 }) => {
   if (!Array.isArray(plateInputPaths) || !plateInputPaths.length) {
     throw new WorkerError('No prepared plate inputs were provided to PrusaSlicer.', {
@@ -39,14 +41,17 @@ export const runSlicerEngine = async ({
   }
   const configPath = path.join(workDir, 'effective-config.ini');
   const gcodePath = path.join(workDir, 'output.gcode');
-  const canonicalConfig = serializePrusaConfig(effectiveConfiguration?.prusaConfig);
-  const hardenedConfig = `${canonicalConfig}post_process =\noutput_filename_format = output.gcode\n`;
-  await fs.writeFile(configPath, hardenedConfig, { mode: 0o600 });
-  await onProgress({
+  const phase = (name, operation) => profileExecutionPhase(profile, name, operation);
+  await phase('presetPreparation', async () => {
+    const canonicalConfig = serializePrusaConfig(effectiveConfiguration?.prusaConfig);
+    const hardenedConfig = `${canonicalConfig}post_process =\noutput_filename_format = output.gcode\n`;
+    await fs.writeFile(configPath, hardenedConfig, { mode: 0o600 });
+  });
+  await phase('slicingProgress', () => onProgress({
     stage: 'slicing',
     progressPercent: 30,
     message: 'Generating toolpaths with the qualified PrusaSlicer core.'
-  });
+  }));
   const result = await runProcess({
     command: config.prusaSlicerCommand,
     args: [
@@ -66,15 +71,15 @@ export const runSlicerEngine = async ({
     cwd: workDir,
     timeoutMs: config.jobTimeoutMs,
     maximumLogBytes: config.maximumLogBytes,
-    signal
+    signal, profile
   });
-  await onProgress({
+  await phase('validationProgress', () => onProgress({
     stage: 'validating',
     progressPercent: 85,
     message: 'Validating G-code and immutable output evidence.'
-  });
-  await canonicalizeGcodeHeader(gcodePath);
-  const inspection = await inspectGcode(gcodePath, config.maximumGcodeBytes);
+  }));
+  await phase('headerCanonicalization', () => canonicalizeGcodeHeader(gcodePath));
+  const inspection = await phase('gcodeInspection', () => inspectGcode(gcodePath, config.maximumGcodeBytes));
   return Object.freeze({
     gcodePath,
     artifact: inspection.artifact,
