@@ -1,15 +1,17 @@
 import {hasFdmAdvancedPreparation,assertFdmPlatePreparation} from './preparation-contract.js';
 import {buildAdvancedPlate3mf} from './advanced-three-mf.js';
 import { BAMBU_ENGINE_KEY } from './bambu-engine.js';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
 import { WorkerError } from './errors.js';
 import { runProcess } from './process.js';
-import { buildTransformed3mf } from './three-mf.js';
+import { buildTransformed3mf, readNormalized3mfXml } from './three-mf.js';
 import { buildPlateObjectTransform } from './transform.js';
 import { compileObjectOverrides } from './object-overrides.js';
 import { buildSupportPainted3mf, assertSupportPaintRoundtrip } from './support-paint.js';
+import { assertNormalizationCacheScope, verifyNormalizationCacheSource } from './normalization-cache.js';
 
 const safeSegment = (value, fallback) => {
   const normalized = String(value || '').replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80);
@@ -53,6 +55,31 @@ const normalizeSourceTo3mf = async ({ sourcePath, outputPath, config, signal }) 
   });
 };
 
+const normalizedSource = async ({ sourcePath, outputPath, config, signal, cache, identity, validate }) => {
+  signal?.throwIfAborted();
+  let bytes = cache?.enabled ? cache.get(identity) : null;
+  const reused = bytes !== null;
+  if (!reused) {
+    await normalizeSourceTo3mf({ sourcePath, outputPath, config, signal });
+    const info = await fs.lstat(outputPath);
+    if (!info.isFile() || info.size <= 0 || info.size > config.maximumNormalizedModelBytes) {
+      throw new WorkerError('Normalized Slicer geometry exceeds the qualified byte limit.', {
+        code: 'slicer_normalized_model_size_exceeded'
+      });
+    }
+    bytes = await fs.readFile(outputPath);
+    if (cache?.enabled) readNormalized3mfXml({ source: bytes, maximumUncompressedBytes: config.maximumNormalizedModelBytes });
+  }
+  if (bytes.length <= 0 || bytes.length > config.maximumNormalizedModelBytes) {
+    throw new WorkerError('Normalized Slicer geometry exceeds the qualified byte limit.', { code: 'slicer_normalized_model_size_exceeded' });
+  }
+  signal?.throwIfAborted();
+  validate?.(bytes);
+  signal?.throwIfAborted();
+  if (!reused && cache?.enabled) cache.put(identity, bytes);
+  return bytes;
+};
+
 export const materializePlateInputs = async ({
   inputSnapshot,
   effectiveConfiguration,
@@ -60,10 +87,14 @@ export const materializePlateInputs = async ({
   workDir,
   config,
   signal,
+  normalizationCache = null,
+  sourceCacheScope = null,
   onProgress = async () => {}
 }) => {
   const { models, objects } = verifyPlateContract({ inputSnapshot, effectiveConfiguration, config });
+  if (normalizationCache?.enabled) assertNormalizationCacheScope(sourceCacheScope);
   const sourceByProjectFileId = new Map();
+  const sourceIdentities = new Map();
   let totalNormalizedBytes = 0;
   for (let index = 0; index < models.length; index += 1) {
     const model = models[index];
@@ -77,8 +108,13 @@ export const materializePlateInputs = async ({
       progressPercent: Math.round(10 + ((index / models.length) * 15)),
       message: `Normalizing source model ${index + 1} of ${models.length}.`
     });
-    await normalizeSourceTo3mf({ sourcePath, outputPath: normalizedPath, config, signal });
-    const normalizedSize = Number((await fs.stat(normalizedPath)).size);
+    const sourceIdentity = normalizationCache?.enabled ? await verifyNormalizationCacheSource({
+      sourcePath, model, maximumBytes: config.maximumModelBytes, signal
+    }) : null;
+    sourceIdentities.set(model.projectFileId, sourceIdentity);
+    const normalized = await normalizedSource({ sourcePath, outputPath: normalizedPath, config, signal,
+      cache: normalizationCache, identity: { scope: sourceCacheScope, source: sourceIdentity } });
+    const normalizedSize = normalized.length;
     totalNormalizedBytes += normalizedSize;
     if (
       !Number.isSafeInteger(normalizedSize)
@@ -91,7 +127,7 @@ export const materializePlateInputs = async ({
         code: 'slicer_normalized_model_size_exceeded'
       });
     }
-    sourceByProjectFileId.set(model.projectFileId, await fs.readFile(normalizedPath));
+    sourceByProjectFileId.set(model.projectFileId, normalized);
   }
 
   const bambu = effectiveConfiguration.engineAdapter === BAMBU_ENGINE_KEY;
@@ -127,14 +163,15 @@ export const materializePlateInputs = async ({
         paint: object.supportPaint, maximumUncompressedBytes: config.maximumNormalizedModelBytes
       });
       await fs.writeFile(annotatedPath, annotated, { mode: 0o600 });
-      await normalizeSourceTo3mf({ sourcePath: annotatedPath, outputPath: normalizedPath, config, signal });
-      const size = (await fs.stat(normalizedPath)).size;
+      source = await normalizedSource({ sourcePath: annotatedPath, outputPath: normalizedPath, config, signal,
+        cache: normalizationCache, identity: { scope: sourceCacheScope, source: sourceIdentities.get(object.fileId),
+          paintChecksumSha256: createHash('sha256').update(JSON.stringify(object.supportPaint)).digest('hex') },
+        validate: after => assertSupportPaintRoundtrip({ before: annotated, after, maximumUncompressedBytes: config.maximumNormalizedModelBytes }) });
+      const size = source.length;
       totalNormalizedBytes += size;
       if (size > config.maximumNormalizedModelBytes || totalNormalizedBytes > config.maximumTotalNormalizedBytes) {
         throw new WorkerError('Painted geometry exceeds qualified normalization limits.', { code: 'slicer_normalized_model_size_exceeded' });
       }
-      source = await fs.readFile(normalizedPath);
-      assertSupportPaintRoundtrip({ before: annotated, after: source, maximumUncompressedBytes: config.maximumNormalizedModelBytes });
       paintedSources.set(key,source);
       }
     }
