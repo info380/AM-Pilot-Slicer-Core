@@ -69,7 +69,7 @@ for(const bambu of [false,true].filter(bambu=>!process.env.FDM_ADVANCED_ENGINE |
  const workDir=await fs.mkdtemp(path.join(os.tmpdir(),`fdm-advanced-${bambu?'bambu':'prusa'}-`));
  if(process.env.KEEP_FDM_NATIVE_OUTPUT)process.stdout.write(`Native output: ${workDir}\n`);
  t.after(()=>process.env.KEEP_FDM_NATIVE_OUTPUT?undefined:fs.rm(workDir,{recursive:true,force:true}));
- const config={bambuStudioCommand:bambuCommand,prusaSlicerCommand:prusaCommand,workRoot:workDir,jobTimeoutMs:120000,requestTimeoutMs:30000,maximumLogBytes:262144,maximumArchiveBytes:16777216,maximumExpandedArchiveBytes:33554432,maximumGcodeBytes:16777216,engineThreads:1,engineCpuAffinity:process.env.SLICER_TEST_CPU_AFFINITY||'none'};
+ const config={bambuStudioCommand:bambuCommand,prusaSlicerCommand:prusaCommand,workRoot:workDir,jobTimeoutMs:120000,requestTimeoutMs:30000,maximumLogBytes:262144,maximumArchiveBytes:16777216,maximumExpandedArchiveBytes:33554432,maximumGcodeBytes:16777216,maximumPlateInputBytes:33554432,engineThreads:1,engineCpuAffinity:process.env.SLICER_TEST_CPU_AFFINITY||'none'};
  let effectiveConfiguration;
  if(bambu){
   const machine=(await resolveBambuPreset({resourceRoot:resources,kind:'machine',name:'Bambu Lab A1 0.4 nozzle'})).settings;
@@ -77,6 +77,7 @@ for(const bambu of [false,true].filter(bambu=>!process.env.FDM_ADVANCED_ENGINE |
   const filament=(await resolveBambuPreset({resourceRoot:resources,kind:'filament',name:'Generic PLA @BBL A1'})).settings;
   Object.assign(processPreset,{curr_bed_type:'Textured PEI Plate',sparse_infill_density:'15%',sparse_infill_pattern:'grid',top_shell_layers:'0',bottom_shell_layers:'0'});
   effectiveConfiguration={engineAdapter:BAMBU_ENGINE_KEY,bambuConfig:{version:1,machine,process:processPreset,filament}};
+  const motionOverrides={machine_max_acceleration_travel:13000};machine.machine_max_acceleration_travel[0]='13000';effectiveConfiguration.ownership={machine:{motionOverrides}};
  }else effectiveConfiguration={prusaConfig:{printer_technology:'FFF',gcode_flavor:'klipper',bed_shape:'0x0,200x0,200x200,0x200',max_print_height:200,nozzle_diameter:.4,filament_diameter:1.75,filament_density:1.24,extrusion_multiplier:1,layer_height:.2,first_layer_height:.2,perimeters:2,top_solid_layers:0,bottom_solid_layers:0,fill_density:'15%',fill_pattern:'grid',temperature:205,first_layer_temperature:210,bed_temperature:55,first_layer_bed_temperature:60,start_gcode:'',end_gcode:'',pause_print_gcode:'PAUSE'}};
  const platePath=path.join(workDir,'plate.3mf');
  const args=argumentsFor(bambu,[{...modifier,shape}]);args.pauseGcode=bambu?effectiveConfiguration.bambuConfig.machine.machine_pause_gcode:effectiveConfiguration.prusaConfig.pause_print_gcode;

@@ -173,6 +173,7 @@ test('real Bambu worker applies whole-facet, partial, blocker and linked support
   const objects=name==='linked'?[object,{...object,id:'copy',transform:{...object.transform,positionMm:{x:30,y:0,z:0}}}]:[object];
   const inputSnapshot={schema:'am-pilot-slicer-input-snapshot',version:1,models:[model],plate:{geometry:{heightMm:256},objects}};
   const effectiveConfiguration={engineAdapter:BAMBU_ENGINE_KEY,coordinateMapping:{projectOrigin:'center',engineBedOrigin:'front_left',translationMm:{x:100,y:100,z:0}},bambuConfig:{version:1,machine,filament,process:{...preset,support_type:['auto','block'].includes(name)?'normal(auto)':'normal(manual)'}}};
+  const motionOverrides={machine_max_acceleration_travel:13000};machine.machine_max_acceleration_travel[0]='13000';effectiveConfiguration.ownership={machine:{motionOverrides}};
   const paths=await materializePlateInputs({inputSnapshot,effectiveConfiguration,downloadedModels:new Map([['source',sourcePath]]),workDir:runDir,config});
   const modelXml=xml(await fs.readFile(paths[0]));
   assert.doesNotMatch(modelXml,/slic3rpe:custom_supports=/);

@@ -6,12 +6,13 @@ import { WorkerError } from './errors.js';
 import { runProcess } from './process.js';
 import { inspectGcode, extractWarnings } from './gcode.js';
 import { normalizeFdmPausePoints } from './preparation-contract.js';
+import {prepareBambuMachineProject,assertBambuMachineOverrideResult} from './bambu-machine-project.js';
 
 export const BAMBU_ENGINE_KEY = 'fdm.am_pilot_bambu_core';
 export const BAMBU_STUDIO_VERSION = '02.08.02.61';
 export const BAMBU_UPSTREAM_REVISION = '926a7192574bcb9b3a732e1ec59a46d79cb45466';
 export const BAMBU_ARCHIVE_CONTENT_TYPE = 'application/vnd.ms-package.3dmanufacturing-3dmodel+xml';
-export const BAMBU_CAPABILITY_REVISION = 'fdm-bambu-2.8.2.61-protocol1-r5';
+export const BAMBU_CAPABILITY_REVISION = 'fdm-bambu-2.8.2.61-protocol1-r6';
 const failure = (message, code = 'slicer_bambu_configuration_invalid') => new WorkerError(message, { code });
 const single = value => Array.isArray(value) && value.length === 1 ? value[0] : undefined;
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -69,7 +70,7 @@ export const verifyBambuStudio = async config => {
 };
 
 // Inspect only bounded, in-memory entries. No archive-supplied path is extracted.
-export const inspectBambuOutput = ({ bytes, machine, filament, maximumArchiveBytes, maximumExpandedBytes, maximumGcodeBytes }) => {
+export const inspectBambuOutput = ({ bytes, machine, filament, machineOverrides, maximumArchiveBytes, maximumExpandedBytes, maximumGcodeBytes }) => {
   for (const limit of [maximumArchiveBytes, maximumExpandedBytes, maximumGcodeBytes]) {
     if (!Number.isSafeInteger(limit) || limit <= 0) throw failure('Explicit archive limits are required.');
   }
@@ -115,6 +116,7 @@ export const inspectBambuOutput = ({ bytes, machine, filament, maximumArchiveByt
     throw failure('Bambu output does not match the requested hardware and material.', 'slicer_bambu_output_mismatch');
   }
   const gcode = files[plates[0]];
+  assertBambuMachineOverrideResult(machineOverrides,machine,settings);
   if (!gcode?.length || gcode.includes(0) || !strFromU8(gcode.subarray(0, 256)).includes(`; BambuStudio ${BAMBU_STUDIO_VERSION}`)) {
     throw failure('Bambu output lacks the expected generator evidence.', 'slicer_gcode_header_invalid');
   }
@@ -145,6 +147,7 @@ export const runBambuEngine = async ({ plateInputPaths, effectiveConfiguration, 
     delete settings.post_process; // Not a Bambu preset option; nonempty values are rejected above.
     await fs.writeFile(paths[kind], JSON.stringify(settings), { mode: 0o600 });
   }
+  plateInputPaths=[await prepareBambuMachineProject({ownership:effectiveConfiguration.ownership?.machine,presets,paths,sourcePath:plateInputPaths[0],workDir,config,signal,cpuAffinityCount:affinityCount(config)})];
   await onProgress({ stage: 'slicing', progressPercent: 30, message: 'Generating Bambu toolpaths and the print archive.' });
   const processResult = await runProcess({ command: config.bambuStudioCommand,
     cpuAffinityCount: affinityCount(config),
@@ -158,7 +161,7 @@ export const runBambuEngine = async ({ plateInputPaths, effectiveConfiguration, 
   const info = await fs.lstat(archivePath);
   if (!info.isFile() || info.size > config.maximumArchiveBytes) throw failure('Invalid Bambu archive output.', 'slicer_bambu_archive_size_invalid');
   const inspected = inspectBambuOutput({ bytes: new Uint8Array(await fs.readFile(archivePath)),
-    machine: presets.machine, filament: presets.filament, maximumArchiveBytes: config.maximumArchiveBytes,
+    machine: presets.machine, filament: presets.filament, machineOverrides:effectiveConfiguration.ownership?.machine, maximumArchiveBytes: config.maximumArchiveBytes,
     maximumExpandedBytes: config.maximumExpandedArchiveBytes, maximumGcodeBytes: config.maximumGcodeBytes });
   const gcodePath = path.join(workDir, 'output.gcode');
   // Preserve bytes exactly: the displayed toolpaths must describe the archive's G-code.
