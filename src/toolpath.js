@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { createInterface } from 'node:readline';
+import { readGcodeLineBatches } from './gcode-lines.js';
 
 import { PRODUCTION_TOOLPATH_CONTENT_TYPE } from './constants.js';
 import { WorkerError } from './errors.js';
@@ -259,7 +259,7 @@ export const compileProductionToolpath = async ({
     currentLayer = null;
   };
 
-  const appendRecord = async record => {
+  const appendRecord = record => {
     if ((recordCount + 1) * PRODUCTION_TOOLPATH_RECORD_BYTES > maximumBytes) {
       throw toolpathError('Production toolpath records exceed the qualified output limit.', 'slicer_toolpath_size_invalid');
     }
@@ -303,12 +303,13 @@ export const compileProductionToolpath = async ({
     moveRecordCounts[MOVE_KINDS[record.moveKind].key] += 1;
     featureRecordCounts[FEATURES[record.featureKind]?.key || 'unknown'] += 1;
     tools.add(record.toolIndex);
-    if (chunkRecordCount === PRODUCTION_TOOLPATH_CHUNK_RECORDS) await flushChunk();
+    if (chunkRecordCount === PRODUCTION_TOOLPATH_CHUNK_RECORDS) return flushChunk();
   };
 
   try {
-    const lines = createInterface({ input: createReadStream(gcodePath, { encoding: 'utf8' }), crlfDelay: Infinity });
-    for await (const rawLine of lines) {
+    const input = createReadStream(gcodePath, { encoding: 'utf8' });
+    for await (const lines of readGcodeLineBatches(input)) {
+    for (const rawLine of lines) {
       lineNumber += 1;
       if (lineNumber > 0xffffffff) throw toolpathError('G-code contains too many source lines.');
       if (bambu && /^;\s*SKIPPABLE_START\b/.test(rawLine)) {
@@ -391,7 +392,7 @@ export const compileProductionToolpath = async ({
           y: position.y - translation.y,
           z: position.z - translation.z
         };
-        await appendRecord({
+        const pendingWrite = appendRecord({
           start: projectPoint,
           end: projectPoint,
           widthMm: 0,
@@ -406,6 +407,7 @@ export const compileProductionToolpath = async ({
           toolIndex: activeTool,
           flags: 1
         });
+        if (pendingWrite) await pendingWrite;
         continue;
       }
       const isArc = bambu && (command === 'G2' || command === 'G3');
@@ -464,7 +466,7 @@ export const compileProductionToolpath = async ({
       const volumetricFlowMm3PerS = moveKind === 1 && durationSeconds > 0
         ? (extrusionDelta * filamentAreaMm2) / durationSeconds
         : 0;
-      await appendRecord({
+      const pendingWrite = appendRecord({
         start,
         end,
         widthMm,
@@ -479,7 +481,9 @@ export const compileProductionToolpath = async ({
         toolIndex: activeTool,
         flags: isArc ? 2 : 0
       });
+      if (pendingWrite) await pendingWrite;
       }
+    }
     }
     if (skippedBambuBlock) throw toolpathError('Unterminated Bambu firmware block.');
     finalizeLayer();

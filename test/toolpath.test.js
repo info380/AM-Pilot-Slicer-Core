@@ -203,3 +203,18 @@ test('native shell and support-transition roles retain their identity and travel
   assert.equal(result.header.catalogs.features[16].displayName, 'Floating vertical shell');
   assert.equal(result.header.catalogs.features[17].displayName, 'Support transition');
 });
+
+test('batched compilation preserves records, line indices and chunk checksums across newline dialects and final partial chunks', async t => {
+  const source = ['G90', 'M83', 'G1 X100 Y100 Z0.2 F6000', ';LAYER_CHANGE', ';Z:0.2', ';HEIGHT:0.2', ';TYPE:External perimeter', ';WIDTH:0.45',
+    ...Array.from({length:18000}, (_,i) => `G1 X${100+i%100} Y${100+Math.floor(i/100)%100} E0.1 F1200`)];
+  let expected;
+  for (const separator of ['\n', '\r\n', '\r']) for (const trailing of ['', separator]) {
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'toolpath-batches-'));
+    t.after(() => fs.rm(directory, {recursive:true,force:true}));
+    const result = await artifactFor(directory, source.join(separator)+trailing, {layerCount:1});
+    const bytes = await fs.readFile(result.path), offset = Math.ceil((16+bytes.readUInt32LE(12))/8)*8;
+    const evidence = {payload:sha256(bytes.subarray(offset)), chunks:result.header.chunks, layers:result.header.layers};
+    if (!expected) expected = evidence; else assert.deepEqual(evidence, expected);
+    assert.equal(result.header.recordCount, 18000); assert.equal(result.header.chunks.length, 2);
+  }
+});
