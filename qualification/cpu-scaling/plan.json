@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "image": "ghcr.io/info380/am-pilot-slicer-core-bambu@sha256:45d873840651779c3f5843ed895628e2cb8c37e68acda6cfc5275de8277d712d",
   "workerRevision": "00118255aeed9e317290269e70e28e5a5825f5f7",
   "workerVersion": "0.6.3",
@@ -8,16 +8,69 @@
   "temporaryBytes": 536870912,
   "repeats": 3,
   "maximumTrialSeconds": 90,
-  "engines": ["bambu", "prusa"],
-  "fixtures": ["linked-ten", "unique-ten", "single-dense"],
+  "engines": [
+    "bambu",
+    "prusa"
+  ],
+  "fixtures": [
+    "linked-ten",
+    "unique-ten",
+    "single-dense"
+  ],
   "cases": [
-    {"id":"q05-t1", "cpuQuota":0.5, "engineThreads":1},
-    {"id":"q1-t1", "cpuQuota":1, "engineThreads":1},
-    {"id":"q1-t2", "cpuQuota":1, "engineThreads":2},
-    {"id":"q1-t4", "cpuQuota":1, "engineThreads":4},
-    {"id":"q2-t1", "cpuQuota":2, "engineThreads":1},
-    {"id":"q2-t2", "cpuQuota":2, "engineThreads":2},
-    {"id":"q2-t4", "cpuQuota":2, "engineThreads":4},
-    {"id":"q4-t4", "cpuQuota":4, "engineThreads":4}
+    {
+      "id": "q05-t1",
+      "cpuQuota": 0.5,
+      "engineThreads": 1,
+      "cpuPlacement": "logical-first"
+    },
+    {
+      "id": "q1-t1",
+      "cpuQuota": 1,
+      "engineThreads": 1,
+      "cpuPlacement": "logical-first"
+    },
+    {
+      "id": "q1-t2",
+      "cpuQuota": 1,
+      "engineThreads": 2,
+      "cpuPlacement": "logical-first"
+    },
+    {
+      "id": "q1-t4",
+      "cpuQuota": 1,
+      "engineThreads": 4,
+      "cpuPlacement": "logical-first"
+    },
+    {
+      "id": "q2-t1",
+      "cpuQuota": 2,
+      "engineThreads": 1,
+      "cpuPlacement": "logical-first"
+    },
+    {
+      "id": "q2-t2",
+      "cpuQuota": 2,
+      "engineThreads": 2,
+      "cpuPlacement": "logical-first"
+    },
+    {
+      "id": "q2-t4",
+      "cpuQuota": 2,
+      "engineThreads": 4,
+      "cpuPlacement": "logical-first"
+    },
+    {
+      "id": "q4-t4",
+      "cpuQuota": 4,
+      "engineThreads": 4,
+      "cpuPlacement": "logical-first"
+    },
+    {
+      "id": "q2-t2-distinct",
+      "cpuQuota": 2,
+      "engineThreads": 2,
+      "cpuPlacement": "distinct-cores"
+    }
   ]
 }

@@ -9,8 +9,9 @@ commands and publication are outside the benchmark.
 
 ## Design
 
-The full plan runs 144 sequential trials: three balanced-order repeats of eight
-CPU-quota/thread-budget pairs, for both engines and three generated workloads:
+The full plan contains 162 trials: three rotated/reversed-order repeats of nine
+CPU-quota/thread/placement cases, for both engines and three generated workloads.
+Each manual job selects one engine and workload and runs its 27 trials sequentially:
 
 - Ten linked 16,384-facet tori with identical local density modifiers.
 - Ten distinct 16,384-facet tori with those same modifiers.
@@ -25,7 +26,14 @@ Standard / Generic PLA presets, textured PEI and disabled supports. The separate
 Prusa recipe is retained in `fixture.mjs`; this is not a comparison of print
 quality or equivalent recipe calibration between engines.
 
-Cases cover 0.5, 1, 2 and 4 CPU quotas with budgets of 1, 2 and 4. The quota-one
+Cases cover 0.5, 1, 2 and 4 CPU quotas with budgets of 1, 2 and 4.
+One additional two-CPU/two-thread case selects one logical CPU from each of two
+distinct cores according to the runner's reported package/core topology. The pilot
+runner reported CPUs 0/1 as siblings and 2/3 as siblings. Legacy Bambu affinity
+therefore selected one reported core at budget two. The placement comparison
+selects CPUs dynamically; it never assumes those IDs on another host. Missing or
+insufficient topology blocks that case. Guest-reported topology is not a claim
+about dedicated physical hardware on a cloud provider. The quota-one
 cases with larger budgets measure oversubscription. A two-CPU/one-thread case
 separates extra quota from parallel work. Prusa receives `--threads`; Bambu uses
 the existing explicit CPU-affinity policy, not a native thread-count argument.
@@ -34,7 +42,8 @@ separately. Helper threads mean the budget is not a claim about total OS threads
 
 One disposable container per trial keeps cgroup resource evidence independent.
 All cases use a 2 GiB memory limit, no swap, a 512 MiB temporary filesystem, four
-permitted logical CPUs, no network, a read-only root, no capabilities, non-root
+permitted logical CPUs for legacy cases (two across reported cores for the
+placement comparison), no network, a read-only root, no capabilities, non-root
 execution and the existing 256-process guard. Only CPU quota and execution thread
 budget change. The host must be native Linux x64 with at least four available
 CPUs and cgroup v2. Emulated measurements are rejected by the controller.
@@ -53,12 +62,15 @@ quality or permission to change production limits.
 
 ```sh
 node qualification/cpu-scaling/run.mjs validate full
-node qualification/cpu-scaling/run.mjs run full /absolute/new/evidence-directory
+node qualification/cpu-scaling/run.mjs run full /absolute/new/evidence-directory bambu linked-ten
 ```
 
 The GitHub **Native CPU and thread measurements (manual)** workflow accepts only
-manual dispatch on reviewed main. `full` is the complete plan; `smoke` executes
-four trials on the linked workload. There is one job, no matrix, no schedule,
+manual dispatch on reviewed main. Select one engine and workload per dispatch.
+`full` runs its 27 trials; `smoke` runs three short comparison cases. The six
+independent engine/workload jobs can run concurrently on separate VMs. All cases
+within each comparison remain on one host. There is one job per dispatch, no
+matrix, no schedule,
 no push/PR execution and a 20-minute job limit. No native image is rebuilt.
 [GitHub documents](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
 standard public-repository Linux runners as four-CPU x64 and free for public
@@ -69,6 +81,10 @@ model, archive and G-code outputs remain temporary runner data.
 Inspect output consistency and within-case variation before interpreting median
 speedups. Public-runner relative scaling is not a production latency guarantee:
 CPU model, shared-host contention, geometry, model instancing and memory limits
-matter. Representative native production A/B measurements are required before
+matter. Separate comparison jobs may have different CPU models; normalize each
+engine/workload to its own same-host baseline rather than combining wall times
+across hosts. The combined pilot reached its time limit after 118 trials; its
+partial results are retained as diagnostic evidence, not mixed into the final
+three-repeat comparisons. Representative native production A/B measurements are required before
 changing paid capacity or the live thread budget. No API, Admin or worker
 deployment is needed for this diagnostic.

@@ -43,14 +43,15 @@ const monitorNative=()=>{
  return {setStage:value=>{stage=value;},async stop(){clearInterval(timer);while(active)await new Promise(resolve=>setTimeout(resolve,1));if(failure)throw failure;return [...observed.values()];}};
 };
 export async function main(args=process.argv.slice(2)){
- const [mode,planFile,location,profileOrTrial]=args;assert(['prepare','trial'].includes(mode));
+ const [mode,planFile,location,profileOrTrial,selectedEngine='all',selectedFixture='all']=args;assert(['prepare','trial'].includes(mode));
  const plan=validatePlan(JSON.parse(await fs.readFile(planFile,'utf8')));const config=configFor(plan,mode==='trial'?JSON.parse(profileOrTrial).engineThreads:1);
  assert.equal(JSON.parse(await fs.readFile('/worker/package.json','utf8')).version,plan.workerVersion);
  if(mode==='prepare'){
   assert(['smoke','full'].includes(profileOrTrial));await fs.mkdir(location,{recursive:true});await fs.mkdir(config.workRoot,{recursive:true});
   const versions={prusa:await verifyPrusaSlicer(config),bambu:await verifyBambuStudio(config)};
   const presets=await bambuRecipe();const result=[];
-  for(const engine of plan.engines)for(const fixture of profileOrTrial==='smoke'?['linked-ten']:plan.fixtures){
+  assert(selectedEngine==='all'||plan.engines.includes(selectedEngine));assert(selectedFixture==='all'||plan.fixtures.includes(selectedFixture));
+  for(const engine of plan.engines.filter(x=>selectedEngine==='all'||x===selectedEngine))for(const fixture of (profileOrTrial==='smoke'&&selectedFixture==='all'?['linked-ten']:plan.fixtures).filter(x=>selectedFixture==='all'||x===selectedFixture)){
    const workDir=path.join(location,engine,fixture);await fs.mkdir(workDir,{recursive:true});const {sources,inputSnapshot}=buildFixture(fixture);const downloadedModels=new Map();
    for(let i=0;i<sources.length;i++){const p=path.join(workDir,`source-${i}.stl`);await fs.writeFile(p,sources[i]);downloadedModels.set(`source-${i}`,p);}
    const effectiveConfiguration={coordinateMapping:{projectOrigin:'center',engineBedOrigin:'front_left',translationMm:{x:128,y:128,z:0}},
@@ -63,13 +64,14 @@ export async function main(args=process.argv.slice(2)){
   }
   console.log(JSON.stringify({prepared:result}));return;
  }
- const trial=JSON.parse(profileOrTrial);assert(plan.cases.some(c=>c.id===trial.id&&c.cpuQuota===trial.cpuQuota&&c.engineThreads===trial.engineThreads));assert(plan.engines.includes(trial.engine)&&plan.fixtures.includes(trial.fixture));
+ const trial=JSON.parse(profileOrTrial);assert(plan.cases.some(c=>c.id===trial.id&&c.cpuQuota===trial.cpuQuota&&c.engineThreads===trial.engineThreads&&c.cpuPlacement===trial.cpuPlacement));assert(plan.engines.includes(trial.engine)&&plan.fixtures.includes(trial.fixture));
  const inputRoot=path.join(location,trial.engine,trial.fixture);const metadata=JSON.parse(await fs.readFile(path.join(inputRoot,'input.json'),'utf8'));
  assert.equal(metadata.recipeChecksum,digestObject(metadata.effectiveConfiguration));const paths=metadata.plateFiles.map(name=>{assert.equal(path.basename(name),name);return path.join(inputRoot,name);});
  assert.deepEqual(await Promise.all(paths.map(async p=>sha256(await fs.readFile(p)))),metadata.plateChecksums);
  const workDir='/tmp/cpu-scaling-trial';await fs.mkdir(workDir,{recursive:true});
  const quota=(await fs.readFile('/sys/fs/cgroup/cpu.max','utf8')).trim().split(' ').map(Number);assert.equal(quota[0]/quota[1],trial.cpuQuota);
  assert.equal(Number(await fs.readFile('/sys/fs/cgroup/memory.max','utf8')),plan.memoryBytes);
+ const actualCpuSet=parseCpuList(/^Cpus_allowed_list:\s*(\S+)/m.exec(await fs.readFile('/proc/self/status','utf8'))[1]);assert.deepEqual(actualCpuSet,trial.cpuSet);
  const stages={},counters={},monitor=monitorNative();let result;const started=performance.now();const before=await cpuStats();
  try{result=await(trial.engine==='bambu'?runBambuEngine:runSlicerEngine)({plateInputPaths:paths,effectiveConfiguration:metadata.effectiveConfiguration,workDir,config,onProgress:async update=>{
   stages[update.stage]=performance.now();counters[update.stage]=await cpuStats();monitor.setStage(update.stage);
