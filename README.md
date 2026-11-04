@@ -329,3 +329,7 @@ lines and unterminated final lines retain the original line numbering. Backpress
 and stream cancellation remain active. Record layout, chunk hashes, output limits,
 Bambu firmware-block handling, arcs, support features and result evidence are
 unchanged; this does not simplify G-code or alter native slicing settings.
+
+### Per-layer Custom G-code
+
+The shared preparation contract accepts `customGcodePoints` alongside pauses. Each point stores an ID, actual printed height in millimetres, and printer G-code text. The native Bambu Custom event and Prusa custom-code event insert it before the first layer at or above that height. Saved text is bounded by the existing machine-script limits. The output verifier checks an exact, unique block at the actual native layer and rejects collisions after layer-height changes. User comments in these blocks do not supply layer, feature, pause or time metadata. No host-side post-processing command is run. Capability revisions are Bambu r7 and Prusa r8; older requests remain governed by exact worker identity.

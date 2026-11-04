@@ -1,3 +1,4 @@
+import {verifyNativeLayerGcode} from './layer-gcode.js';
 import { BAMBU_ENGINE_KEY, BAMBU_CAPABILITY_REVISION, runBambuEngine, verifyBambuStudio } from './bambu-engine.js';
 import { assertFdmPlatePreparation, hasFdmAdvancedPreparation } from './preparation-contract.js';
 import { verifyNativePauseEvents } from './pause-verification.js';
@@ -99,7 +100,7 @@ export const validateClaim = (claim, config) => {
   }
   const models = Array.isArray(claim.inputSnapshot.models) ? claim.inputSnapshot.models : [];
   const objects = Array.isArray(claim.inputSnapshot.plate?.objects) ? claim.inputSnapshot.plate.objects : [];
-  if (Object.hasOwn(claim.inputSnapshot.plate || {}, 'pausePoints') || objects.some(object => Object.hasOwn(object, 'modifiers'))) {
+  if (Object.hasOwn(claim.inputSnapshot.plate || {}, 'customGcodePoints') || Object.hasOwn(claim.inputSnapshot.plate || {}, 'pausePoints') || objects.some(object => Object.hasOwn(object, 'modifiers'))) {
     assertFdmPlatePreparation(claim.inputSnapshot.plate);
     if (hasFdmAdvancedPreparation(claim.inputSnapshot.plate) && run.capabilityRevisionId !== (config.engineKey === BAMBU_ENGINE_KEY ? BAMBU_CAPABILITY_REVISION : CAPABILITY_REVISION_ID))
       throw new WorkerError('Pauses and modifiers require the qualified preparation capability.', { code: 'slicer_preparation_capability_required' });
@@ -299,6 +300,7 @@ export const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal })
       plateInputPaths,
       effectiveConfiguration,
       pausePoints: inputSnapshot.plate.pausePoints || [],
+      customGcodePoints: inputSnapshot.plate.customGcodePoints || [],
       workDir,
       config,
       signal: jobSignal,
@@ -308,10 +310,11 @@ export const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal })
       ...rawResult,
       metrics: config.engineKey === BAMBU_ENGINE_KEY ? rawResult.metrics : enrichResultMetrics(rawResult.metrics, effectiveConfiguration)
     });
-    if (inputSnapshot.plate.pausePoints?.length) verifyNativePauseEvents({
-      gcode: await fs.readFile(result.gcodePath, 'utf8'), pausePoints: inputSnapshot.plate.pausePoints,
-      bambu: config.engineKey === BAMBU_ENGINE_KEY
-    });
+    if(inputSnapshot.plate.pausePoints?.length||inputSnapshot.plate.customGcodePoints?.length){
+      const gcode=await fs.readFile(result.gcodePath,'utf8'),bambu=config.engineKey===BAMBU_ENGINE_KEY;
+      verifyNativeLayerGcode({gcode,customGcodePoints:inputSnapshot.plate.customGcodePoints||[],pausePoints:inputSnapshot.plate.pausePoints||[],bambu});
+      verifyNativePauseEvents({gcode,pausePoints:inputSnapshot.plate.pausePoints||[],bambu});
+    }
     finishStage('slicingAndValidation');
     await sendProgress({
       stage: 'compiling-preview',

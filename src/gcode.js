@@ -1,3 +1,4 @@
+import {createLayerGcodeCommentScope} from './layer-gcode.js';
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import fs from 'node:fs/promises';
@@ -88,9 +89,10 @@ export const inspectGcode = async (gcodePath, maximumBytes) => {
   }
 
   const metrics = {};
-  let layerCount = 0;
+  let layerCount = 0;const layerGcodeScope=createLayerGcodeCommentScope();
   const lines = createInterface({ input: createReadStream(gcodePath, { encoding: 'utf8' }), crlfDelay: Infinity });
   for await (const line of lines) {
+    if(layerGcodeScope.consume(line)||layerGcodeScope.active)continue;
     let match = line.match(/^;\s*(?:estimated printing time(?: \(normal mode\))?\s*=|model printing time:.*?total estimated time:)\s*(.+)$/i);
     if (match) {
       const parsed = durationSeconds(match[1]);

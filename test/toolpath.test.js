@@ -1,3 +1,4 @@
+import {layerGcodeBlock} from '../src/layer-gcode.js';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -217,4 +218,10 @@ test('batched compilation preserves records, line indices and chunk checksums ac
     if (!expected) expected = evidence; else assert.deepEqual(evidence, expected);
     assert.equal(result.header.recordCount, 18000); assert.equal(result.header.chunks.length, 2);
   }
+});
+
+test('custom layer commands retain real layer identity and ignore injected metadata comments',async t=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'slicer-layer-toolpath-'));t.after(()=>fs.rm(root,{recursive:true,force:true}));
+ const block=layerGcodeBlock({id:'custom',zMm:.2,gcode:';LAYER_CHANGE\n;Z:99\n;TYPE:Support material\n;WIDTH:9\n;HEIGHT:9\n; estimated printing time = 1s\nG1 X105 Y100 E0.1 F600'});
+ const artifact=await artifactFor(root,gcode.replace(';WIDTH:0.45\n',';WIDTH:0.45\n'+block+'\n'));assert.equal(artifact.header.layerCount,2);assert.deepEqual(artifact.header.layers.map(layer=>layer.zMm),[.2,.4]);assert(artifact.header.statistics.featureRecordCounts.custom>0);
 });

@@ -1,3 +1,4 @@
+import {gcodeLines,createLayerGcodeCommentScope} from './layer-gcode.js';
 import { normalizeFdmPausePoints } from './preparation-contract.js';
 import { WorkerError } from './errors.js';
 // Same comparison tolerance as the pinned native CustomGCode contract.
@@ -6,8 +7,9 @@ export const verifyNativePauseEvents = ({ gcode, pausePoints, bambu }) => {
   const requested = normalizeFdmPausePoints(pausePoints);
   if (!requested.length) return;
   const layers = [], events = [];
-  let zMm = null;
-  for (const line of gcode.split(/\r?\n/)) {
+  let zMm = null;const scope=createLayerGcodeCommentScope();
+  for (const line of gcodeLines(gcode)) {
+    if(scope.consume(line)||scope.active)continue;
     const height = line.match(bambu ? /^; Z_HEIGHT: ([\d.]+)$/ : /^;Z:([\d.]+)$/);
     if (height) { zMm = Number(height[1]); layers.push(zMm); }
     if ((bambu ? /^;\s*PAUSE_PRINTING\s*$/ : /^;\s*PAUSE_PRINT\s*$/).test(line)) events.push(zMm);
