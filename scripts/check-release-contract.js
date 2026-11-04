@@ -125,9 +125,14 @@ assert.match(sharedRuntime, /node:22\.23\.4-bookworm-slim@sha256:4b150b48b4116e2
 assert.match(sharedRuntime, /COPY --from=dependencies \/usr\/local\/bin\/node \/usr\/local\/bin\/node/);
 assert.doesNotMatch(sharedRuntime, /COPY --from=geometry \/usr\/local\/bin\/node/);
 assert.match(sharedRuntime, /libbrotli1=1\.1\.0-2ubuntu0\.1/);
-assert.equal((sharedRuntime.match(/20261101T000000Z/g) || []).length, 6);
+assert.equal((sharedRuntime.match(/20261104T000000Z/g) || []).length, 6);
 const sharedEvidence = fs.readFileSync(new URL('./write-bambu-release-evidence.js', import.meta.url), 'utf8');
-assert.match(sharedEvidence, /ubuntuSnapshot='20261101T000000Z'/);
+assert.match(sharedEvidence, /ubuntuSnapshot='20261104T000000Z'/);
+assert.match(sharedRuntime, /libpcre2-8-0=10\.42-4ubuntu2\.2/);
+assert.match(sharedRuntime, /libsoup-3\.0-0=3\.4\.4-5ubuntu0\.10/);
+assert.match(sharedRuntime, /libsoup-3\.0-common=3\.4\.4-5ubuntu0\.10/);
+assert.match(sharedEvidence, /pcre2PackageVersion='10\.42-4ubuntu2\.2'/);
+assert.match(sharedEvidence, /libsoup3PackageVersion='3\.4\.4-5ubuntu0\.10'/);
 assert.match(sharedEvidence, /nodeVersion='22\.23\.4'/);
 
 assert.match(sharedRuntime, /zlib1g=1:1\.3\.dfsg-3\.1ubuntu2\.3/);
