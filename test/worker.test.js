@@ -189,6 +189,9 @@ test('keeps the worker process alive while an empty queue is being polled', asyn
       pollIntervalMs: 1_000,
       requestTimeoutMs: 1_000,
       maximumLogBytes: 65_536,
+      normalizationCacheMaximumBytes: 0,
+      normalizationCacheMaximumEntries: 128,
+      normalizationCacheTtlMs: 900_000,
       retryBackoffMaximumMs: 3_000
     };
     const fetchImpl = async url => {
@@ -254,6 +257,26 @@ test('keeps the worker process alive while an empty queue is being polled', asyn
   assert.equal(processSignal, null);
   assert.match(stdout, /"event":"slicer_worker_stopped"/);
   assert.doesNotMatch(stderr, /unsettled top-level await/i);
+});
+
+test('enabled normalization reuse rejects an older API before claiming any job', async t => {
+  const { runWorker } = await import('../src/worker.js');
+  const { loadWorkerConfig } = await import('../src/config.js');
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'cache-api-readiness-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const executable = path.join(directory, 'prusa');
+  await fs.writeFile(executable, '#!/bin/sh\nprintf "PrusaSlicer-2.9.3\\n"\n', { mode: 0o700 });
+  const workerConfig = loadWorkerConfig({ AM_PILOT_API_BASE_URL: 'https://api.example.test',
+    SLICER_WORKER_CONTROL_TOKEN: 't'.repeat(48), SLICER_WORKER_ID: 'cache-readiness-test',
+    SLICER_IMAGE_DIGEST: digest, PRUSA_SLICER_CMD: executable, SLICER_WORK_ROOT: directory,
+    SLICER_NORMALIZATION_CACHE_MAX_BYTES: '1024' });
+  let claimed = false;
+  await assert.rejects(runWorker({ config: workerConfig, fetchImpl: async url => {
+    if (new URL(url).pathname.endsWith('/health')) return new Response(JSON.stringify({ ready: true, workerProtocolVersion: 1 }));
+    claimed = true;
+    throw new Error('Must not claim on an incompatible API.');
+  } }), { code: 'slicer_normalization_cache_unsupported' });
+  assert.equal(claimed, false);
 });
 
 test('advanced preparation fails closed on old capabilities and malformed fields', () => {

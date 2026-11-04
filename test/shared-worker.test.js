@@ -55,6 +55,7 @@ test('busy queues alternate without parallel claims or executions', async () => 
   const order = [];
   let active = 0;
   let peak = 0;
+  const normalizationCache = Object.freeze({ enabled: true });
   const engines = keys.map(engineKey => ({
     config: { engineKey },
     api: { claim: async () => {
@@ -62,9 +63,10 @@ test('busy queues alternate without parallel claims or executions', async () => 
       return { engineKey };
     } }
   }));
-  await runWorkerLoop({ engines, signal: controller.signal,
+  await runWorkerLoop({ engines, signal: controller.signal, normalizationCache,
     wait: async () => assert.fail('Busy queues should not sleep'),
-    execute: async ({ claim, config }) => {
+    execute: async ({ claim, config, normalizationCache: actualCache }) => {
+      assert.equal(actualCache, normalizationCache);
       assert.equal(claim.engineKey, config.engineKey);
       peak = Math.max(peak, ++active);
       await new Promise(resolve => setImmediate(resolve));

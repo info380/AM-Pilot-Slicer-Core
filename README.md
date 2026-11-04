@@ -107,6 +107,9 @@ enough for every customer model.
 | `SLICER_MAX_NORMALIZED_MODEL_BYTES` | 67108864 |
 | `SLICER_MAX_TOTAL_NORMALIZED_BYTES` | 134217728 |
 | `SLICER_MAX_PLATE_INPUT_BYTES` | 201326592 |
+| `SLICER_NORMALIZATION_CACHE_MAX_BYTES` | 0 (disabled) |
+| `SLICER_NORMALIZATION_CACHE_MAX_ENTRIES` | 128 |
+| `SLICER_NORMALIZATION_CACHE_TTL_MS` | 900000 |
 | `SLICER_MAX_GCODE_BYTES` | 67108864 |
 | `SLICER_MAX_MANIFEST_BYTES` | 1048576 |
 | `SLICER_MAX_TOOLPATH_PREVIEW_BYTES` | 268435456 |
@@ -335,3 +338,38 @@ unchanged; this does not simplify G-code or alter native slicing settings.
 The shared preparation contract accepts `customGcodePoints` alongside pauses. Each point stores an ID, actual printed height in millimetres, and printer G-code text. The native Bambu Custom event and Prusa custom-code event insert it before the first layer at or above that height. Saved text is bounded by the existing machine-script limits. The output verifier checks an exact, unique block at the actual native layer and rejects collisions after layer-height changes. User comments in these blocks do not supply layer, feature, pause or time metadata. No host-side post-processing command is run. Capability revisions are Bambu r7 and Prusa r8; older requests remain governed by exact worker identity.
 
 Worker-code releases use the immutable signed native runtime from `bambu-v0.3.3` (source `8b5ee15b80c55aaa63db1c96a3ef2c7e8fa3ee5c`, digest `sha256:3545ba6ac6accb118628c3e83e82d25400e525d80dda9e1de35fe8e353840385`). Its full native build recipe is in the permanent corresponding-source archive. The new image replaces worker source, schemas and dependencies, verifies inherited security-fixed package versions and both native binaries, and records runtime provenance. Container isolation, scanning, signatures, source publication and native tests still run for every release. A native-runtime upgrade requires a new reviewed base digest and its matching build/source evidence.
+
+
+## Tenant-separated normalized geometry reuse
+
+Optional process-local reuse avoids repeating Prusa's source-to-3MF conversion.
+Enable it only after the authenticated API health response advertises
+`sourceNormalizationCacheVersion: 1`. Each leased claim must supply
+`sourceCacheScope: { version: 1, tenantNamespaceSha256: "<64 lowercase hex>" }`,
+derived by the API from the leased database tenant. The worker never accepts a
+caller-selected namespace. An enabled cache refuses an incompatible API before
+claiming work; a malformed claim fails that run closed.
+
+Source downloads and their authorization, immutable size and SHA-256 checks
+still happen on every run. Entries are keyed by API-issued tenant namespace,
+source format/size/SHA-256, paint evidence, and verified normalizer/image identity.
+Paint round-trip checks and all expanded-source, aggregate-source and plate byte
+limits still run on hits. Placement, modifiers, print settings, native slicing,
+G-code and result validation are rebuilt every time. No native slicedata cache,
+G-code cache or disk cache is used.
+
+The cache is disabled by default. `SLICER_NORMALIZATION_CACHE_MAX_BYTES` explicitly
+sets retained compressed bytes, bounded by the existing aggregate normalized
+source budget. Entry count is bounded to 1–1024, expiry to 60–3600 seconds. Entries
+expire after insertion (hits do not extend retention), use LRU eviction, and are
+cleared/zeroed on expiry, eviction and orderly shutdown. A single cache is shared
+by both engines in the existing one-job loop; restart loses all entries. Owned
+buffer copies and checksums prevent mutation from contaminating another run.
+Oversized entries take the ordinary cold conversion path without being retained.
+
+For the initial 512 MiB worker, the proposed opt-in is 32 MiB, 128 entries and
+15 minutes; retain constrained native qualification and measure actual memory
+before promotion. `slicer_normalization_cache` logs only run ID and aggregate
+hits/misses/evictions/entry/byte counts, with no source or tenant namespace.
+Deploy the API namespace contract before enabling this worker configuration.
+No Admin, database schema or printer communication change is required.

@@ -22,7 +22,7 @@ import {
   writeResultManifest
 } from './manifest.js';
 import { materializePlateInputs } from './plate.js';
-import { createNormalizationCache } from './normalization-cache.js';
+import { createNormalizationCache, NORMALIZATION_CACHE_SCOPE_VERSION } from './normalization-cache.js';
 import { SUPPORT_PAINT_CAPABILITY } from './support-paint.js';
 import { compileProductionToolpath } from './toolpath.js';
 
@@ -287,6 +287,7 @@ export const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal, n
       downloadedModels.set(model.modelId, targetPath);
     }
     finishStage('download');
+    const cacheBefore = normalizationCache?.enabled ? normalizationCache.stats() : null;
     const plateInputPaths = await materializePlateInputs({
       inputSnapshot,
       effectiveConfiguration,
@@ -299,6 +300,12 @@ export const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal, n
       onProgress: sendProgress
     });
     finishStage('preparation');
+    if (cacheBefore) {
+      const stats = normalizationCache.stats();
+      log('info', 'slicer_normalization_cache', { runId: run.id,
+        hits: stats.hits - cacheBefore.hits, misses: stats.misses - cacheBefore.misses,
+        evictions: stats.evictions - cacheBefore.evictions, entries: stats.entries, bytes: stats.bytes });
+    }
     const rawResult = await (config.engineKey === BAMBU_ENGINE_KEY ? runBambuEngine : runSlicerEngine)({
       plateInputPaths,
       effectiveConfiguration,
@@ -439,6 +446,12 @@ export const runWorker = async ({ config, fetchImpl = globalThis.fetch, signal =
     if (health?.ready !== true || Number(health?.workerProtocolVersion) !== config.protocolVersion) {
       throw new WorkerError('The AM Pilot API does not support this worker protocol.', {
         code: 'slicer_worker_protocol_unsupported'
+      });
+    }
+    if (config.normalizationCacheMaximumBytes > 0
+      && health.sourceNormalizationCacheVersion !== NORMALIZATION_CACHE_SCOPE_VERSION) {
+      throw new WorkerError('The API does not support tenant-separated normalization reuse.', {
+        code: 'slicer_normalization_cache_unsupported'
       });
     }
     engines.push({ api, config: engineConfig, engineVersion });

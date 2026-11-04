@@ -18,6 +18,9 @@ test('loads an immutable fail-closed worker identity', () => {
   assert.equal(config.engineKey, 'fdm.am_pilot_prusa_core');
   assert.equal(config.protocolVersion, 1);
   assert.equal(config.engineThreads, 1);
+  assert.equal(config.normalizationCacheMaximumBytes, 0);
+  assert.equal(config.normalizationCacheMaximumEntries, 128);
+  assert.equal(config.normalizationCacheTtlMs, 900_000);
   assert.equal(config.maximumModelBytes, 33_554_432);
   assert.equal(config.maximumTotalModelBytes, 134_217_728);
   assert.equal(config.maximumNormalizedModelBytes, 67_108_864);
@@ -35,6 +38,17 @@ test('loads an immutable fail-closed worker identity', () => {
   assert.throws(() => loadWorkerConfig(environment({
     SLICER_MAX_TOOLPATH_PREVIEW_BYTES: '1048575'
   }), { allowInsecureLoopback: true }), /SLICER_MAX_TOOLPATH_PREVIEW_BYTES/);
+});
+
+test('normalization cache budgets require explicit bounded opt-in', () => {
+  const load = values => loadWorkerConfig(environment(values), { allowInsecureLoopback: true });
+  assert.equal(load({ SLICER_NORMALIZATION_CACHE_MAX_BYTES: '33554432' }).normalizationCacheMaximumBytes, 33554432);
+  for (const values of [{ SLICER_NORMALIZATION_CACHE_MAX_BYTES: '-1' },
+    { SLICER_NORMALIZATION_CACHE_MAX_BYTES: '134217729' }, { SLICER_NORMALIZATION_CACHE_MAX_ENTRIES: '0' },
+    { SLICER_NORMALIZATION_CACHE_MAX_ENTRIES: '1025' }, { SLICER_NORMALIZATION_CACHE_TTL_MS: '59999' },
+    { SLICER_NORMALIZATION_CACHE_TTL_MS: '3600001' }]) {
+    assert.throws(() => load(values), { code: 'slicer_worker_configuration_invalid' });
+  }
 });
 
 test('rejects insecure non-loopback API origins', () => {

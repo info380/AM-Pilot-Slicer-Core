@@ -4,11 +4,12 @@ import fs from 'node:fs/promises';
 import { WorkerError } from './errors.js';
 
 const HASH = /^[a-f0-9]{64}$/;
+export const NORMALIZATION_CACHE_SCOPE_VERSION = 1;
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const invalid = message => new WorkerError(message, { code: 'slicer_normalization_cache_invalid' });
 
 export const assertNormalizationCacheScope = scope => {
-  if (!scope || scope.version !== 1 || !HASH.test(scope.tenantNamespaceSha256 || '')
+  if (!scope || scope.version !== NORMALIZATION_CACHE_SCOPE_VERSION || !HASH.test(scope.tenantNamespaceSha256 || '')
     || Object.keys(scope).length !== 2) {
     throw invalid('Normalization reuse requires an API-issued tenant cache namespace.');
   }
@@ -90,7 +91,8 @@ export const createNormalizationCache = ({ maximumBytes, maximumEntries, ttlMs, 
       prune();
       const key = keyFor(identity), entry = entries.get(key);
       if (!entry) { misses++; return null; }
-      assertNormalizationCacheEntry(entry);
+      try { assertNormalizationCacheEntry(entry); }
+      catch (error) { remove(key); evictions++; throw error; }
       entries.delete(key); entries.set(key, entry);
       hits++;
       return Buffer.from(entry.bytes);
