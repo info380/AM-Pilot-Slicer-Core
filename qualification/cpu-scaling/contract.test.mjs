@@ -23,6 +23,8 @@ test('resource evidence rejects malformed CPU sets and counter reversals',()=>{
  assert.deepEqual(parseCpuList('2-3,8,10-11'),[2,3,8,10,11]);for(const value of ['2,2','3-2','a','0-99999'])assert.throws(()=>parseCpuList(value));
  assert.deepEqual(counterDelta(parseCounters('usage_usec 2\nnr_throttled 0'),parseCounters('usage_usec 9\nnr_throttled 1')),{usage_usec:7,nr_throttled:1});
  assert.throws(()=>counterDelta({usage_usec:9},{usage_usec:2}));
+ assert.deepEqual(parseCounters('usage_usec 7\ncore_sched.force_idle_usec 3'),{usage_usec:7,'core_sched.force_idle_usec':3});
+ for(const invalid of ['usage_usec -1','usage_usec 1 extra','usage_usec 1.5','bad..counter 2'])assert.throws(()=>parseCounters(invalid));
 });
 test('output evidence keeps executable changes while separating only Prusa execution threads',()=>{
  assert.equal(commandChecksum('; comment\nG1 X1 E2 ; extrusion\n'),commandChecksum('G1 X1 E2\n'));
