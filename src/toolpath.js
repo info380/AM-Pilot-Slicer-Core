@@ -1,3 +1,4 @@
+import {createLayerGcodeCommentScope} from './layer-gcode.js';
 import { BAMBU_ENGINE_KEY } from './bambu-engine.js';
 import { arcPreviewPoints, ARC_PREVIEW_TOLERANCE_MM } from './arc.js';
 import { createHash } from 'node:crypto';
@@ -226,7 +227,7 @@ export const compileProductionToolpath = async ({
   let extrusionAbsolute = true;
   let activeTool = 0;
   let lineNumber = 0;
-  let skippedBambuBlock = false;
+  let skippedBambuBlock = false;const layerGcodeScope=createLayerGcodeCommentScope();let featureBeforeLayerGcode=0;
   const position = { x: 0, y: 0, z: 0, e: 0, feedMmPerMinute: 0 };
 
   const flushChunk = async () => {
@@ -312,6 +313,8 @@ export const compileProductionToolpath = async ({
     for (const rawLine of lines) {
       lineNumber += 1;
       if (lineNumber > 0xffffffff) throw toolpathError('G-code contains too many source lines.');
+      const wasLayerGcode=layerGcodeScope.active;
+      if(layerGcodeScope.consume(rawLine)){if(!wasLayerGcode&&layerGcodeScope.active){featureBeforeLayerGcode=currentFeature;currentFeature=13;}else if(wasLayerGcode&&!layerGcodeScope.active)currentFeature=featureBeforeLayerGcode;continue;}
       if (bambu && /^;\s*SKIPPABLE_START\b/.test(rawLine)) {
         if (skippedBambuBlock) throw toolpathError('Nested Bambu firmware blocks are unsupported.');
         skippedBambuBlock = true; continue;

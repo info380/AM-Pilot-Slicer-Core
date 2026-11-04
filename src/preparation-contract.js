@@ -5,6 +5,7 @@ const normalizeSlicerObjectPrintOverrides = value => { compileObjectOverrides(va
 // Versioned common preparation contract, independent of the selected engine.
 // Only region settings supported by both native engines enter a modifier.
 export const FDM_PREPARATION_VERSION = 1;
+export const GCODE_SCRIPT_LIMITS = Object.freeze({perScriptCharacters:100000,totalCharacters:500000});
 export const FDM_PREPARATION_LIMITS = Object.freeze({ pausePoints: 128, modifiersPerObject: 32, modifiersPerPlate: 256 });
 export const FDM_MODIFIER_SHAPES = Object.freeze(['box', 'cylinder', 'sphere']);
 export const FDM_MODIFIER_INFILL_PATTERNS = Object.freeze(['rectilinear','alignedrectilinear','grid','triangles','stars','cubic','line','concentric','honeycomb','3dhoneycomb','gyroid','hilbertcurve','archimedeanchords','octagramspiral','adaptivecubic','supportcubic','lightning']);
@@ -48,6 +49,23 @@ export const normalizeFdmPausePoints = value => {
     return { id, zMm, message };
   }).sort((a, b) => a.zMm - b.zMm);
 };
+export const normalizeFdmCustomGcodePoints = value => {
+  if(!Array.isArray(value)||value.length>FDM_PREPARATION_LIMITS.pausePoints)fail('Too many custom G-code points or invalid layer action list.');
+  const ids=new Set(),heights=new Set();
+  const result=value.map(entry=>{
+    if(!exact(entry,['id','zMm','gcode']))fail('Invalid custom G-code point.');
+    const id=label(entry.id,'custom G-code identity',240),zMm=finite(entry.zMm,'custom G-code height',true);
+    if(ids.has(id)||heights.has(zMm))fail('Custom G-code identities and heights must be unique.');
+    ids.add(id);heights.add(zMm);
+    if(typeof entry.gcode!=='string'||!entry.gcode.trim()||entry.gcode.length>GCODE_SCRIPT_LIMITS.perScriptCharacters
+      ||/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(entry.gcode))fail('Custom G-code must contain printer commands within the script size limit.');
+    if(/^\s*;\s*AM_PILOT_LAYER_GCODE_(?:BEGIN|END)\b/im.test(entry.gcode))fail('Custom G-code cannot contain reserved layer-action markers.');
+    return {id,zMm,gcode:entry.gcode.replace(/\r\n?/g,'\n').trim()};
+  }).sort((a,b)=>a.zMm-b.zMm);
+  if(JSON.stringify(result).length>GCODE_SCRIPT_LIMITS.totalCharacters)fail('Custom G-code exceeds the plate script size limit.');
+  return result;
+};
+
 export const normalizeFdmModifiers = value => {
   if (!Array.isArray(value) || value.length > FDM_PREPARATION_LIMITS.modifiersPerObject) fail('Too many modifiers or invalid modifier list.');
   const ids = new Set();
@@ -77,7 +95,12 @@ export const assertFdmPlatePreparation = plate => {
   if (!record(plate) || !Array.isArray(plate.objects) || !Number.isFinite(plate.geometry?.heightMm) || plate.geometry.heightMm <= 0) fail('A valid plate and build height are required.');
   const pauses = normalizeFdmPausePoints(Object.hasOwn(plate, 'pausePoints') ? plate.pausePoints : []);
   if (pauses.some(pause => pause.zMm > plate.geometry.heightMm)) fail('A pause is above the selected build volume.');
+  const custom=normalizeFdmCustomGcodePoints(Object.hasOwn(plate,'customGcodePoints')?plate.customGcodePoints:[]);
+  if(new Set([...pauses,...custom].map(point=>point.id)).size!==pauses.length+custom.length)fail('Layer action identities must be unique.');
+  if(custom.some(point=>point.zMm>plate.geometry.heightMm))fail('Custom G-code is above the selected build volume.');
+  if(custom.length+pauses.length>FDM_PREPARATION_LIMITS.pausePoints)fail('The plate contains too many layer actions.');
+  if(custom.some(point=>pauses.some(pause=>pause.zMm===point.zMm)))fail('Choose either Pause or Custom G-code at a layer.');
   const count = plate.objects.reduce((sum, object) => sum + normalizeFdmModifiers(Object.hasOwn(object, 'modifiers') ? object.modifiers : []).length, 0);
   if (count > FDM_PREPARATION_LIMITS.modifiersPerPlate) fail('The plate contains too many modifiers.');
 };
-export const hasFdmAdvancedPreparation = plate => Boolean(plate.pausePoints?.length || plate.objects?.some(object => object.modifiers?.length));
+export const hasFdmAdvancedPreparation = plate => Boolean(plate.pausePoints?.length || plate.customGcodePoints?.length || plate.objects?.some(object => object.modifiers?.length));
