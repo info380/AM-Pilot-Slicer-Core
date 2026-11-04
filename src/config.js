@@ -189,6 +189,12 @@ export const loadWorkerConfig = (environment = process.env, options = {}) => {
     maximumNormalizedModelBytes,
     maximumTotalNormalizedBytes,
     maximumPlateInputBytes,
+    normalizationCacheMaximumBytes: boundedInteger(environment, 'SLICER_NORMALIZATION_CACHE_MAX_BYTES',
+      DEFAULTS.normalizationCacheMaximumBytes, 0, maximumTotalNormalizedBytes),
+    normalizationCacheMaximumEntries: boundedInteger(environment, 'SLICER_NORMALIZATION_CACHE_MAX_ENTRIES',
+      DEFAULTS.normalizationCacheMaximumEntries, 1, 1024),
+    normalizationCacheTtlMs: boundedInteger(environment, 'SLICER_NORMALIZATION_CACHE_TTL_MS',
+      DEFAULTS.normalizationCacheTtlMs, 60_000, 3_600_000),
     maximumGcodeBytes: boundedInteger(environment, 'SLICER_MAX_GCODE_BYTES', DEFAULTS.maximumGcodeBytes, 1_048_576, 2_147_483_648),
     maximumManifestBytes: boundedInteger(environment, 'SLICER_MAX_MANIFEST_BYTES', DEFAULTS.maximumManifestBytes, 1_024, 8_388_608),
     maximumToolpathPreviewBytes: boundedInteger(

@@ -22,6 +22,7 @@ import {
   writeResultManifest
 } from './manifest.js';
 import { materializePlateInputs } from './plate.js';
+import { createNormalizationCache, NORMALIZATION_CACHE_SCOPE_VERSION } from './normalization-cache.js';
 import { SUPPORT_PAINT_CAPABILITY } from './support-paint.js';
 import { compileProductionToolpath } from './toolpath.js';
 
@@ -213,7 +214,7 @@ const enrichResultMetrics = (metrics, effectiveConfiguration) => {
   });
 };
 
-export const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal }) => {
+export const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal, normalizationCache = null }) => {
   // Only a verified run/lease identity may receive a job failure report.
   const claim = validateClaimIdentity(rawClaim, config);
   const { run, lease, inputSnapshot, effectiveConfiguration } = claim;
@@ -286,16 +287,25 @@ export const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal })
       downloadedModels.set(model.modelId, targetPath);
     }
     finishStage('download');
+    const cacheBefore = normalizationCache?.enabled ? normalizationCache.stats() : null;
     const plateInputPaths = await materializePlateInputs({
       inputSnapshot,
       effectiveConfiguration,
       downloadedModels,
       workDir,
       config,
+      normalizationCache,
+      sourceCacheScope: claim.sourceCacheScope,
       signal: jobSignal,
       onProgress: sendProgress
     });
     finishStage('preparation');
+    if (cacheBefore) {
+      const stats = normalizationCache.stats();
+      log('info', 'slicer_normalization_cache', { runId: run.id,
+        hits: stats.hits - cacheBefore.hits, misses: stats.misses - cacheBefore.misses,
+        evictions: stats.evictions - cacheBefore.evictions, entries: stats.entries, bytes: stats.bytes });
+    }
     const rawResult = await (config.engineKey === BAMBU_ENGINE_KEY ? runBambuEngine : runSlicerEngine)({
       plateInputPaths,
       effectiveConfiguration,
@@ -392,7 +402,7 @@ export const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal })
 };
 
 // All engines share one execution slot. A busy queue cannot starve the next engine.
-export const runWorkerLoop = async ({ engines, signal, execute = runClaim, wait = sleep }) => {
+export const runWorkerLoop = async ({ engines, signal, execute = runClaim, wait = sleep, normalizationCache = null }) => {
   let next = 0;
   let empty = 0;
   let consecutiveErrors = 0;
@@ -405,7 +415,7 @@ export const runWorkerLoop = async ({ engines, signal, execute = runClaim, wait 
       if (signal?.aborted) break;
       if (claim) {
         empty = 0;
-        await execute({ claim, api, config, shutdownSignal: signal });
+        await execute({ claim, api, config, shutdownSignal: signal, normalizationCache });
       } else if (++empty >= engines.length) {
         empty = 0;
         await wait(config.pollIntervalMs, signal);
@@ -438,6 +448,12 @@ export const runWorker = async ({ config, fetchImpl = globalThis.fetch, signal =
         code: 'slicer_worker_protocol_unsupported'
       });
     }
+    if (config.normalizationCacheMaximumBytes > 0
+      && health.sourceNormalizationCacheVersion !== NORMALIZATION_CACHE_SCOPE_VERSION) {
+      throw new WorkerError('The API does not support tenant-separated normalization reuse.', {
+        code: 'slicer_normalization_cache_unsupported'
+      });
+    }
     engines.push({ api, config: engineConfig, engineVersion });
   }
   // Verify every configured engine before accepting any work.
@@ -451,6 +467,16 @@ export const runWorker = async ({ config, fetchImpl = globalThis.fetch, signal =
       concurrency: 1
     });
   }
-  await runWorkerLoop({ engines, signal });
+  const normalizationCache = createNormalizationCache({
+    maximumBytes: config.normalizationCacheMaximumBytes,
+    maximumEntries: config.normalizationCacheMaximumEntries,
+    ttlMs: config.normalizationCacheTtlMs,
+    normalizerIdentity: JSON.stringify([config.imageDigest, config.prusaSlicerCommand, geometryEngineVersion])
+  });
+  try {
+    await runWorkerLoop({ engines, signal, normalizationCache });
+  } finally {
+    normalizationCache.dispose();
+  }
   log('info', 'slicer_worker_stopped', { workerId: config.workerId });
 };

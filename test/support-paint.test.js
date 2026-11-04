@@ -10,6 +10,7 @@ import { unzipSync, strFromU8, strToU8, zipSync } from 'fflate';
 import { buildSupportPainted3mf, readPaintableStl, validateSupportPaint, assertSupportPaintRoundtrip } from '../src/support-paint.js';
 import { materializePlateInputs } from '../src/plate.js';
 import { runProcess } from '../src/process.js';
+import { createNormalizationCache } from '../src/normalization-cache.js';
 
 // Closed L prism: one foot on the bed and an unsupported shelf at z=10.
 const profile = [[-5,0],[0,0],[0,10],[5,10],[5,20],[-5,20]];
@@ -24,6 +25,42 @@ const checksum = createHash('sha256').update(source).digest('hex');
 const model = { modelId: 'source', projectFileId: 'file', sourceFormat: 'stl', checksumSha256: checksum };
 const paint = data => ({ schema: 'am-pilot-support-paint', version: 1, triangleCount: facets.length, sourceSha256: checksum, data });
 const xml = archive => strFromU8(unzipSync(archive)['3D/3dmodel.model']);
+
+test('native normalization reuse preserves paint across engines, jobs and changed annotations',
+  { skip: !process.env.PRUSA_SLICER_INTEGRATION_CMD }, async t => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'native-normalization-reuse-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const sourcePath = path.join(directory, 'source.stl'); await fs.writeFile(sourcePath, source);
+  const cache = createNormalizationCache({ maximumBytes: 1_048_576, maximumEntries: 8, ttlMs: 60_000,
+    normalizerIdentity: 'qualified-native-test' });
+  t.after(() => cache.dispose());
+  const config = { prusaSlicerCommand: process.env.PRUSA_SLICER_INTEGRATION_CMD, jobTimeoutMs: 30_000,
+    maximumLogBytes: 262_144, maximumModelBytes: 1_048_576, maximumNormalizedModelBytes: 1_048_576,
+    maximumTotalNormalizedBytes: 2_097_152, maximumPlateInputBytes: 2_097_152 };
+  for (const bambu of [false, true]) {
+    const effectiveConfiguration = { ...(bambu ? { engineAdapter: BAMBU_ENGINE_KEY, bambuConfig: { machine: {} } } : { prusaConfig: {} }),
+      coordinateMapping: { projectOrigin: 'center', engineBedOrigin: 'front_left', translationMm: { x: 100, y: 100, z: 0 } } };
+    let previous;
+    for (const [name, data] of [['cold', '12:4\n13:4'], ['warm', '12:4\n13:4'], ['changed', '12:8\n13:8']]) {
+      const workDir = path.join(directory, `${bambu}-${name}`); await fs.mkdir(workDir);
+      const inputSnapshot = { schema: 'am-pilot-slicer-input-snapshot', version: 1,
+        models: [{ ...model, sizeBytes: source.length }], plate: { objects: [{ id: 'object', fileId: 'file', name: 'Painted part',
+          supportPaint: paint(data), placement: { status: 'placed' }, transform: {
+            positionMm: { x: 0, y: 0, z: 0 }, rotationDeg: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 }
+          } }] } };
+      const inputs = await materializePlateInputs({ inputSnapshot, effectiveConfiguration,
+        downloadedModels: new Map([['source', sourcePath]]), workDir, config, normalizationCache: cache,
+        sourceCacheScope: { version: 1, tenantNamespaceSha256: 'a'.repeat(64) } });
+      const bytes = await fs.readFile(inputs[0]);
+      assert.match(xml(bytes), bambu ? /paint_supports=/ : /slic3rpe:custom_supports=/);
+      if (name === 'warm') assert.deepEqual(bytes, previous);
+      if (name === 'changed') assert.notDeepEqual(bytes, previous);
+      previous = bytes;
+    }
+  }
+  assert.equal(cache.stats().misses, 3);
+  assert.equal(cache.stats().hits, 9);
+});
 
 test('native painted package retains source facets, coordinates, states and determinism', () => {
   const options = { source, model, paint: paint('0:40003\n1:8'), maximumUncompressedBytes: 1_000_000 };

@@ -33,5 +33,8 @@ export const DEFAULTS = Object.freeze({
   maximumToolpathPreviewBytes: 268_435_456,
   maximumLogBytes: 262_144,
   engineThreads: 1,
+  normalizationCacheMaximumBytes: 0,
+  normalizationCacheMaximumEntries: 128,
+  normalizationCacheTtlMs: 900_000,
   retryBackoffMaximumMs: 30_000
 });
