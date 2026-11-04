@@ -38,8 +38,10 @@ export const parseCpuList = text => {
   return cpus;
 };
 export const parseCounters = text => Object.fromEntries(text.trim().split('\n').map(line => {
-  const [key, raw] = line.trim().split(/\s+/); const value = Number(raw);
-  assert.match(key, /^[a-z_]+$/); assert(Number.isFinite(value) && value >= 0); return [key, value];
+  const match = /^([a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*)\s+(\d+)$/.exec(line.trim());
+  assert(match, 'Malformed kernel counter evidence');
+  const [, key, raw] = match, value = Number(raw);
+  assert(Number.isSafeInteger(value) && value >= 0); return [key, value];
 }));
 export const counterDelta = (before, after) => Object.fromEntries(Object.keys(before).map(key => {
   assert(Number.isFinite(after[key]) && after[key] >= before[key]); return [key, after[key] - before[key]];
