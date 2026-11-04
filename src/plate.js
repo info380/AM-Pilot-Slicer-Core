@@ -163,7 +163,7 @@ export const materializePlateInputs = async ({
     result.push(targetPath);
   }
   if(advanced || bambu){
-    const prepared=buildAdvancedPlate3mf({sources:preparedSources,pausePoints:inputSnapshot.plate.pausePoints||[],bambu,
+    const prepared=buildAdvancedPlate3mf({sources:preparedSources,pausePoints:inputSnapshot.plate.pausePoints||[],customGcodePoints:inputSnapshot.plate.customGcodePoints||[],bambu,
       pauseGcode:bambu?effectiveConfiguration.bambuConfig.machine.machine_pause_gcode:effectiveConfiguration.prusaConfig.pause_print_gcode,
       maximumUncompressedBytes:config.maximumPlateInputBytes,maximumSourceUncompressedBytes:config.maximumNormalizedModelBytes});
     const filename=path.join(workDir,'prepared-plate.3mf');await fs.writeFile(filename,prepared,{mode:0o600});return [filename];

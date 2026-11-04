@@ -1,3 +1,4 @@
+import {layerGcodeBlock} from './layer-gcode.js';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -5,14 +6,14 @@ import { unzipSync, strFromU8 } from 'fflate';
 import { WorkerError } from './errors.js';
 import { runProcess } from './process.js';
 import { inspectGcode, extractWarnings } from './gcode.js';
-import { normalizeFdmPausePoints } from './preparation-contract.js';
+import { normalizeFdmPausePoints,normalizeFdmCustomGcodePoints } from './preparation-contract.js';
 import {prepareBambuMachineProject,assertBambuMachineOverrideResult} from './bambu-machine-project.js';
 
 export const BAMBU_ENGINE_KEY = 'fdm.am_pilot_bambu_core';
 export const BAMBU_STUDIO_VERSION = '02.08.02.61';
 export const BAMBU_UPSTREAM_REVISION = '926a7192574bcb9b3a732e1ec59a46d79cb45466';
 export const BAMBU_ARCHIVE_CONTENT_TYPE = 'application/vnd.ms-package.3dmanufacturing-3dmodel+xml';
-export const BAMBU_CAPABILITY_REVISION = 'fdm-bambu-2.8.2.61-protocol1-r6';
+export const BAMBU_CAPABILITY_REVISION = 'fdm-bambu-2.8.2.61-protocol1-r7';
 const failure = (message, code = 'slicer_bambu_configuration_invalid') => new WorkerError(message, { code });
 const single = value => Array.isArray(value) && value.length === 1 ? value[0] : undefined;
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -124,22 +125,20 @@ export const inspectBambuOutput = ({ bytes, machine, filament, machineOverrides,
     platePath: plates[0] };
 };
 
-export const runBambuEngine = async ({ plateInputPaths, effectiveConfiguration, pausePoints = [], workDir, config, signal, onProgress = async () => {} }) => {
+export const runBambuEngine = async ({ plateInputPaths, effectiveConfiguration, pausePoints = [], customGcodePoints = [], workDir, config, signal, onProgress = async () => {} }) => {
   const presets = assertBambuEffectiveConfiguration(effectiveConfiguration);
   // A single geometry package owns all plate objects and their explicit placement.
   if (!Array.isArray(plateInputPaths) || plateInputPaths.length !== 1) {
     throw failure('Bambu slicing requires one assembled plate package.', 'slicer_plate_input_missing');
   }
   const paths = {};
-  const pauses = normalizeFdmPausePoints(pausePoints);
-  if (pauses.length) {
-    if (!presets.machine.machine_pause_gcode?.trim()) throw failure('The printer has no configured pause command.');
+  const pauses = normalizeFdmPausePoints(pausePoints),custom=normalizeFdmCustomGcodePoints(customGcodePoints);
+  if (pauses.length||custom.length) {
+    if (pauses.length&&!presets.machine.machine_pause_gcode?.trim()) throw failure('The printer has no configured pause command.');
     // The pinned native CLI has an explicit layer-event input. It does not
     // retain project layer events when loading external preset files.
     paths.pauses = path.join(workDir, 'pause-events.json');
-    await fs.writeFile(paths.pauses, JSON.stringify({ mode: 'SingleExtruder', gcodes: pauses.map(pause => ({
-      print_z: pause.zMm, type: 'PausePrint', extruder: 1, color: '', extra: pause.message
-    })) }), { mode: 0o600 });
+    await fs.writeFile(paths.pauses, JSON.stringify({ mode: 'SingleExtruder', gcodes: [...pauses.map(pause=>({print_z:pause.zMm,type:'PausePrint',extruder:1,color:'',extra:pause.message})),...custom.map(point=>({print_z:point.zMm,type:'Custom',extruder:1,color:'',extra:layerGcodeBlock(point)}))].sort((a,b)=>a.print_z-b.print_z) }), { mode: 0o600 });
   }
   for (const kind of ['machine', 'process', 'filament']) {
     paths[kind] = path.join(workDir, `${kind}.json`);

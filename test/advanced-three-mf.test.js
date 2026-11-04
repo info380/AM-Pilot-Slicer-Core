@@ -1,3 +1,4 @@
+import {verifyNativeLayerGcode} from '../src/layer-gcode.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import fs from 'node:fs/promises';
@@ -80,15 +81,17 @@ for(const bambu of [false,true].filter(bambu=>!process.env.FDM_ADVANCED_ENGINE |
   const motionOverrides={machine_max_acceleration_travel:13000};machine.machine_max_acceleration_travel[0]='13000';effectiveConfiguration.ownership={machine:{motionOverrides}};
  }else effectiveConfiguration={prusaConfig:{printer_technology:'FFF',gcode_flavor:'klipper',bed_shape:'0x0,200x0,200x200,0x200',max_print_height:200,nozzle_diameter:.4,filament_diameter:1.75,filament_density:1.24,extrusion_multiplier:1,layer_height:.2,first_layer_height:.2,perimeters:2,top_solid_layers:0,bottom_solid_layers:0,fill_density:'15%',fill_pattern:'grid',temperature:205,first_layer_temperature:210,bed_temperature:55,first_layer_bed_temperature:60,start_gcode:'',end_gcode:'',pause_print_gcode:'PAUSE'}};
  const platePath=path.join(workDir,'plate.3mf');
- const args=argumentsFor(bambu,[{...modifier,shape}]);args.pauseGcode=bambu?effectiveConfiguration.bambuConfig.machine.machine_pause_gcode:effectiveConfiguration.prusaConfig.pause_print_gcode;
+ const args=argumentsFor(bambu,[{...modifier,shape}]);args.customGcodePoints=[{id:'insert-start',zMm:2.15,gcode:'M400\nM117 AM Pilot insert'},{id:'insert-end',zMm:7.2,gcode:'M400\nM117 AM Pilot done'}];args.pauseGcode=bambu?effectiveConfiguration.bambuConfig.machine.machine_pause_gcode:effectiveConfiguration.prusaConfig.pause_print_gcode;
  await fs.writeFile(platePath,buildAdvancedPlate3mf(args));
- const result=await (bambu?runBambuEngine:runSlicerEngine)({config,workDir,plateInputPaths:[platePath],effectiveConfiguration,pausePoints:args.pausePoints});
+ const result=await (bambu?runBambuEngine:runSlicerEngine)({config,workDir,plateInputPaths:[platePath],effectiveConfiguration,pausePoints:args.pausePoints,customGcodePoints:args.customGcodePoints});
  const gcode=await fs.readFile(result.gcodePath,'utf8');
  verifyNativePauseEvents({gcode,pausePoints:args.pausePoints,bambu});
+ verifyNativeLayerGcode({gcode,customGcodePoints:args.customGcodePoints,pausePoints:args.pausePoints,bambu});
  assert.ok(bambu?gcode.includes('; PAUSE_PRINT'):gcode.includes(';PAUSE_PRINT'),'native pause event was generated');
  const layers=gcode.split(bambu?/; CHANGE_LAYER\n/:/;LAYER_CHANGE\n/);
  const layerAt=z=>layers.find(layer=>Number(layer.match(bambu?/; Z_HEIGHT: ([\d.]+)/:/;Z:([\d.]+)/)?.[1])===z);
  const extrusionMoves=layer=>(layer.match(/\bX[-\d.]+ Y[-\d.]+[^\n]* E/g)||[]).length;
+ for(const [z,command] of [[2.2,'M117 AM Pilot insert'],[7.2,'M117 AM Pilot done']]){const layer=layerAt(z);assert(layer.indexOf(command)>=0&&layer.indexOf(command)<layer.search(bambu?/; FEATURE: (?:Inner|Outer) wall/:/;TYPE:(?:External perimeter|Perimeter)/),'Custom G-code must precede layer extrusion');}
  assert.ok(infillLength(layerAt(1.2))>infillLength(layerAt(7.2))*2,'dense infill is confined to the modifier height');
  const pauseLayer=layers.find(layer=>layer.includes('PAUSE_PRINT'));
  assert.equal(Number(pauseLayer.match(bambu?/; Z_HEIGHT: ([\d.]+)/:/;Z:([\d.]+)/)?.[1]),5.2,'pause occurs on the requested layer');
@@ -99,13 +102,13 @@ for(const bambu of [false,true].filter(bambu=>!process.env.FDM_ADVANCED_ENGINE |
  const first=args.sources[0].object.modifiers[0];
  args.sources[0].object.modifiers.push({...first,id:'region-2',name:'Later hollow region',printOverrides:{fill_density:0}});
  await fs.writeFile(platePath,buildAdvancedPlate3mf(args));
- const second=await(bambu?runBambuEngine:runSlicerEngine)({config,workDir,plateInputPaths:[platePath],effectiveConfiguration,pausePoints:args.pausePoints});
+ const second=await(bambu?runBambuEngine:runSlicerEngine)({config,workDir,plateInputPaths:[platePath],effectiveConfiguration,pausePoints:args.pausePoints,customGcodePoints:args.customGcodePoints});
  const secondCode=await fs.readFile(second.gcodePath,'utf8'),secondLayers=secondCode.split(bambu?/; CHANGE_LAYER\n/:/;LAYER_CHANGE\n/);
  const low=secondLayers.find(layer=>Number(layer.match(bambu?/; Z_HEIGHT: ([\d.]+)/:/;Z:([\d.]+)/)?.[1])===1.2);
  assert.ok(infillLength(low)<infillLength(layerAt(1.2))/2,'later overlapping modifier has precedence');
  if(shape==='box'){
   // A left-half modifier must produce real native ironing only on that half.
-  args.pausePoints=[];args.sources[0].object.modifiers=[{...modifier,name:'Ironed left half',sizeMm:{x:12,y:22,z:12},transform:transform(-5,0,5),printOverrides:{
+  args.pausePoints=[];args.customGcodePoints=[];args.sources[0].object.modifiers=[{...modifier,name:'Ironed left half',sizeMm:{x:12,y:22,z:12},transform:transform(-5,0,5),printOverrides:{
    perimeters:4,fill_density:100,fill_pattern:'rectilinear',top_solid_layers:3,bottom_solid_layers:3,
    top_solid_min_thickness:.6,bottom_solid_min_thickness:.6,thin_walls:false,overhangs:true,
    top_fill_pattern:'monotonic',bottom_fill_pattern:'monotonic',fill_angle:45,bridge_angle:0,

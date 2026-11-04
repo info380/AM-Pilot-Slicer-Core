@@ -1,12 +1,13 @@
+import {layerGcodeBlock} from './layer-gcode.js';
 import {zipSync,strToU8} from 'fflate';
 import {readNormalized3mfXml,CONTENT_TYPES,RELATIONSHIPS} from './three-mf.js';
 import {IDENTITY_3MF_TRANSFORM,parse3mfTransform,multiply3mfTransforms,apply3mfTransform,buildPlateObjectTransform,format3mfTransform} from './transform.js';
-import {normalizeFdmModifiers,normalizeFdmPausePoints,FDM_PREPARATION_LIMITS} from './preparation-contract.js';
+import {normalizeFdmModifiers,normalizeFdmPausePoints,normalizeFdmCustomGcodePoints,FDM_PREPARATION_LIMITS} from './preparation-contract.js';
 import {modifierGeometry} from './modifier-geometry.js';
 import {compileObjectOverrides} from './object-overrides.js';
 import {WorkerError} from './errors.js';
 const error=message=>{throw new WorkerError(message,{code:'slicer_preparation_geometry_invalid'});};
-const xml=value=>String(value).replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;').replaceAll('>','&gt;');
+const xml=value=>String(value).replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('\n','&#10;').replaceAll('\r','&#13;').replaceAll('\t','&#9;');
 const attr=(source,name)=>source.match(new RegExp('\\b'+name+'="([^"]*)"'))?.[1];
 const determinant = m => m[0]*(m[4]*m[8]-m[5]*m[7])-m[1]*(m[3]*m[8]-m[5]*m[6])+m[2]*(m[3]*m[7]-m[4]*m[6]);
 const transformedVertex = (point, matrix) => {
@@ -63,9 +64,9 @@ const paintAttributes=(attributes,painted)=>attributes
  .replace(/\s*slic3rpe:custom_supports="([^"]*)"/g,(_match,data)=>painted?` paint_supports="${data}"`:'');
 const meshXml=({vertices,triangles},bambu=false,painted=false)=>`<mesh><vertices>${vertices.map(p=>`<vertex x="${p.x}" y="${p.y}" z="${p.z}"/>`).join('')}</vertices><triangles>${triangles.map(t=>{const ids=t.indices||t;return `<triangle v1="${ids[0]}" v2="${ids[1]}" v3="${ids[2]}"${bambu?paintAttributes(t.attributes||'',painted):t.attributes||''}/>`;}).join('')}</triangles></mesh>`;
 
-export const buildAdvancedPlate3mf=({sources,pausePoints=[],bambu=false,pauseGcode,maximumUncompressedBytes,maximumSourceUncompressedBytes})=>{
+export const buildAdvancedPlate3mf=({sources,pausePoints=[],customGcodePoints=[],bambu=false,pauseGcode,maximumUncompressedBytes,maximumSourceUncompressedBytes})=>{
  if(!Array.isArray(sources)||!sources.length||!Number.isSafeInteger(maximumUncompressedBytes)||maximumUncompressedBytes<=0||!Number.isSafeInteger(maximumSourceUncompressedBytes)||maximumSourceUncompressedBytes<=0)error('Explicit preparation sources and limits are required.');
- const pauses=normalizeFdmPausePoints(pausePoints);
+ const pauses=normalizeFdmPausePoints(pausePoints),custom=normalizeFdmCustomGcodePoints(customGcodePoints);
  if(pauses.length&&(typeof pauseGcode!=='string'||!pauseGcode.trim()))error('The selected printer has no configured pause command.');
  let nextId=1,totalModifiers=0;const resources=[],items=[],metadata=[],instances=[];
  const linked = new Map();
@@ -111,8 +112,8 @@ export const buildAdvancedPlate3mf=({sources,pausePoints=[],bambu=false,pauseGco
  const model=`<?xml version="1.0" encoding="UTF-8"?><model unit="millimeter" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:slic3rpe="http://schemas.slic3r.org/3mf/2017/06"><metadata name="slic3rpe:Version3mf">1</metadata>${bambu?'<metadata name="BambuStudio:3mfVersion">1</metadata><metadata name="BambuStudio:FdmSupportsPaintingVersion">0</metadata>':'<metadata name="slic3rpe:FdmSupportsPaintingVersion">1</metadata>'}<resources>${resources.join('')}</resources><build>${items.join('')}</build></model>`;
  const config=`<?xml version="1.0" encoding="UTF-8"?><config>${metadata.join('')}${bambu?`<plate><metadata key="plater_id" value="1"/>${instances.join('')}</plate>`:''}</config>`;
  const files={'[Content_Types].xml':entry(CONTENT_TYPES),'_rels/.rels':entry(RELATIONSHIPS),'3D/3dmodel.model':entry(model),[bambu?'Metadata/model_settings.config':'Metadata/Slic3r_PE_model.config']:entry(config)};
- if(pauses.length){
-  const events=pauses.map(p=>bambu?`<layer top_z="${p.zMm}" type="1" extruder="1" color="" extra="${xml(p.message)}" gcode="${xml(pauseGcode)}"/>`:`<code print_z="${p.zMm}" type="1" extruder="1" color="" extra="${xml(p.message)}" gcode="${xml(pauseGcode)}"/>`).join('');
+ if(pauses.length||custom.length){
+  const events=[...pauses,...custom].sort((a,b)=>a.zMm-b.zMm).map(p=>{const custom=Object.hasOwn(p,'gcode'),code=custom?layerGcodeBlock(p):pauseGcode,extra=custom?code:p.message;return bambu?`<layer top_z="${p.zMm}" type="${custom?4:1}" extruder="1" color="" extra="${xml(extra)}" gcode="${xml(code)}"/>`:`<code print_z="${p.zMm}" type="${custom?4:1}" extruder="1" color="" extra="${xml(extra)}" gcode="${xml(code)}"/>`;}).join('');
   files[bambu?'Metadata/custom_gcode_per_layer.xml':'Metadata/Prusa_Slicer_custom_gcode_per_print_z.xml']=entry(bambu?`<custom_gcodes_per_layer><plate><plate_info id="1"/>${events}<mode value="SingleExtruder"/></plate></custom_gcodes_per_layer>`:`<custom_gcodes_per_print_z>${events}<mode value="SingleExtruder"/></custom_gcodes_per_print_z>`);
  }
  if(Object.values(files).reduce((sum,[bytes])=>sum+bytes.length,0)>maximumUncompressedBytes)error('Prepared geometry exceeds the plate input budget.');

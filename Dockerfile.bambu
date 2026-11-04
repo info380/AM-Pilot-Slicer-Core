@@ -1,49 +1,28 @@
 # syntax=docker/dockerfile:1.7
-# Reuse the released Prusa binary for Prusa slicing and Bambu source geometry.
-ARG PRUSA_RUNTIME_IMAGE=ghcr.io/info380/am-pilot-slicer-core@sha256:0538a4153ba17dca093b76e0ae23253308c6f8eeaf5832fd78ef668de7115285
-ARG UBUNTU_RUNTIME_IMAGE=ubuntu:24.04@sha256:a853f94d226358a79c740cfc7bce0c289748f3fe3488d921d038ccd752c61b60
+# Native runtime from signed/scanned bambu-v0.3.3, with permanent corresponding source:
+# https://github.com/info380/AM-Pilot-Slicer-Core/releases/tag/bambu-v0.3.3
+ARG VERIFIED_RUNTIME_IMAGE=ghcr.io/info380/am-pilot-slicer-core-bambu@sha256:3545ba6ac6accb118628c3e83e82d25400e525d80dda9e1de35fe8e353840385
 ARG NODE_BUILD_IMAGE=node:22.23.4-bookworm-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da
 FROM ${NODE_BUILD_IMAGE} AS dependencies
 WORKDIR /worker
 COPY package.json package-lock.json ./
-RUN npm ci --ignore-scripts --omit=dev \
-    && node -e 'require("node:fs").writeFileSync("/worker/bootstrap-ca.crt", require("node:tls").rootCertificates.join("\n") + "\n")'
-FROM ${PRUSA_RUNTIME_IMAGE} AS geometry
-FROM ${UBUNTU_RUNTIME_IMAGE} AS bambu-download
-COPY --from=dependencies /worker/bootstrap-ca.crt /etc/ssl/certs/ca-certificates.crt
-RUN rm -f /etc/apt/sources.list.d/ubuntu.sources \
-    && printf '%s\n' \
-      'deb [check-valid-until=no] http://snapshot.ubuntu.com/ubuntu/20261104T000000Z noble main universe' \
-      'deb [check-valid-until=no] http://snapshot.ubuntu.com/ubuntu/20261104T000000Z noble-updates main universe' \
-      'deb [check-valid-until=no] http://snapshot.ubuntu.com/ubuntu/20261104T000000Z noble-security main universe' > /etc/apt/sources.list \
-    && apt-get -o Acquire::Check-Valid-Until=false update && apt-get install -y --no-install-recommends ca-certificates curl \
-    && curl --fail --location --proto '=https' --tlsv1.2 \
-      'https://github.com/bambulab/BambuStudio/releases/download/v02.08.02.61/BambuStudio_ubuntu22.04-v02.08.02.61-20260820225108.AppImage' \
-      --output /tmp/bambu.AppImage \
-    && echo '69426a59682574591590f51c913d3889baa19252d1c8e9fcae2497eb0ed6bf92  /tmp/bambu.AppImage' | sha256sum --check --strict \
-    && chmod +x /tmp/bambu.AppImage && cd /opt && /tmp/bambu.AppImage --appimage-extract >/dev/null \
-    && rm -rf /opt/squashfs-root/resources/web
-FROM ${UBUNTU_RUNTIME_IMAGE} AS runtime
-COPY --from=dependencies /worker/bootstrap-ca.crt /etc/ssl/certs/ca-certificates.crt
+RUN npm ci --ignore-scripts --omit=dev
+FROM ${VERIFIED_RUNTIME_IMAGE} AS runtime
+USER root
+WORKDIR /worker
+# Replace the old worker entirely while retaining the verified native binaries.
+RUN rm -rf ./src ./schemas ./node_modules
 LABEL org.opencontainers.image.title="AM Pilot Shared Slicer Worker" \
       org.opencontainers.image.source="https://github.com/info380/AM-Pilot-Slicer-Core" \
       org.opencontainers.image.licenses="AGPL-3.0-only" \
       org.opencontainers.image.bambustudio.version="02.08.02.61" \
       org.opencontainers.image.bambustudio.revision="926a7192574bcb9b3a732e1ec59a46d79cb45466"
-RUN rm -f /etc/apt/sources.list.d/ubuntu.sources \
-    && printf '%s\n' \
-      'deb [check-valid-until=no] http://snapshot.ubuntu.com/ubuntu/20261104T000000Z noble main universe' \
-      'deb [check-valid-until=no] http://snapshot.ubuntu.com/ubuntu/20261104T000000Z noble-updates main universe' \
-      'deb [check-valid-until=no] http://snapshot.ubuntu.com/ubuntu/20261104T000000Z noble-security main universe' > /etc/apt/sources.list \
-    && apt-get -o Acquire::Check-Valid-Until=false update && apt-get install -y --no-install-recommends \
-      ca-certificates util-linux libwebkit2gtk-4.1-0 libglu1-mesa libosmesa6 libsecret-1-0 \
-      libgstreamer-plugins-base1.0-0 libpng16-16t64 libgmp10 libbrotli1=1.1.0-2ubuntu0.1 zlib1g=1:1.3.dfsg-3.1ubuntu2.3 \
-      libpcre2-8-0=10.42-4ubuntu2.2 libsoup-3.0-0=3.4.4-5ubuntu0.10 libsoup-3.0-common=3.4.4-5ubuntu0.10 \
-    && rm -rf /var/lib/apt/lists/* \
-    && useradd --uid 10001 --create-home --shell /usr/sbin/nologin worker
-COPY --from=dependencies /usr/local/bin/node /usr/local/bin/node
-COPY --from=geometry /opt/prusa /opt/prusa
-COPY --from=bambu-download /opt/squashfs-root /opt/bambu
+# Assert the security-fixed packages inherited from the signed runtime.
+RUN test "$(dpkg-query -W -f='${Version}' libbrotli1)" = '1.1.0-2ubuntu0.1' \
+    && test "$(dpkg-query -W -f='${Version}' zlib1g)" = '1:1.3.dfsg-3.1ubuntu2.3' \
+    && test "$(dpkg-query -W -f='${Version}' libpcre2-8-0)" = '10.42-4ubuntu2.2' \
+    && test "$(dpkg-query -W -f='${Version}' libsoup-3.0-0)" = '3.4.4-5ubuntu0.10' \
+    && test "$(dpkg-query -W -f='${Version}' libsoup-3.0-common)" = '3.4.4-5ubuntu0.10'
 WORKDIR /worker
 COPY --from=dependencies /worker/node_modules ./node_modules
 COPY package.json package-lock.json ./
