@@ -1,3 +1,4 @@
+import { createExecutionProfile } from '../src/execution-profile.js';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -116,3 +117,23 @@ test(`real Bambu engine preserves ${model} ${nozzle} mm archive and preview plac
 });
 
 }
+
+
+test('profiles Bambu control, subprocess and validation phases without changing output bytes', async t => {
+  const workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bambu-profile-'));
+  t.after(() => fs.rm(workDir, { recursive: true, force: true }));
+  const nativeArchive = archive();
+  await fs.writeFile(path.join(workDir, 'fixture.3mf'), nativeArchive);
+  const command = path.join(workDir, 'engine-test-double');
+  await fs.writeFile(command, '#!/bin/sh\ncp fixture.3mf output.gcode.3mf\n', { mode: 0o700 });
+  const profile = createExecutionProfile();
+  const result = await runBambuEngine({ plateInputPaths: ['plate.3mf'], effectiveConfiguration: configuration(), workDir,
+    config: { bambuStudioCommand: command, jobTimeoutMs: 5000, maximumLogBytes: 1024, ...limits, maximumExpandedArchiveBytes: limits.maximumExpandedBytes }, profile });
+  assert.deepEqual(await fs.readFile(result.archivePath), Buffer.from(nativeArchive));
+  assert.deepEqual(await fs.readFile(result.gcodePath), Buffer.from(gcode));
+  assert.deepEqual(profile.completedPhases, ['presetPreparation', 'machineProjectPreparation', 'slicingProgress', 'affinitySetup',
+    'nativeSubprocess', 'validationProgress', 'archiveValidation', 'gcodeInspection']);
+  assert.equal(profile.failedPhase, undefined);
+  assert.ok(Object.values(profile.timingsMs).every(value => Number.isFinite(value) && value >= 0));
+  assert.equal(result.profile, undefined);
+});

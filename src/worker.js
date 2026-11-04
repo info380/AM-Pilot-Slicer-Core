@@ -1,3 +1,4 @@
+import { createExecutionProfile, profileExecutionPhase } from './execution-profile.js';
 import {verifyNativeLayerGcode} from './layer-gcode.js';
 import { BAMBU_ENGINE_KEY, BAMBU_CAPABILITY_REVISION, runBambuEngine, verifyBambuStudio } from './bambu-engine.js';
 import { assertFdmPlatePreparation, hasFdmAdvancedPreparation } from './preparation-contract.js';
@@ -232,6 +233,13 @@ export const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal, n
   };
   let heartbeatActive = false;
   const timingsMs = {};
+  let engineProfile = null;
+  let engineProfileLogged = false;
+  const logEngineProfile = outcome => {
+    if (!engineProfile || engineProfileLogged) return;
+    engineProfileLogged = true;
+    log('info', 'slicer_engine_profile', { runId: run.id, engineKey: config.engineKey, outcome, ...engineProfile });
+  };
   let stageStarted = performance.now();
   const finishStage = stage => {
     const now = performance.now();
@@ -306,6 +314,7 @@ export const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal, n
         hits: stats.hits - cacheBefore.hits, misses: stats.misses - cacheBefore.misses,
         evictions: stats.evictions - cacheBefore.evictions, entries: stats.entries, bytes: stats.bytes });
     }
+    engineProfile = createExecutionProfile();
     const rawResult = await (config.engineKey === BAMBU_ENGINE_KEY ? runBambuEngine : runSlicerEngine)({
       plateInputPaths,
       effectiveConfiguration,
@@ -314,18 +323,22 @@ export const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal, n
       workDir,
       config,
       signal: jobSignal,
-      onProgress: sendProgress
+      onProgress: sendProgress,
+      profile: engineProfile
     });
     const result = Object.freeze({
       ...rawResult,
       metrics: config.engineKey === BAMBU_ENGINE_KEY ? rawResult.metrics : enrichResultMetrics(rawResult.metrics, effectiveConfiguration)
     });
-    if(inputSnapshot.plate.pausePoints?.length||inputSnapshot.plate.customGcodePoints?.length){
-      const gcode=await fs.readFile(result.gcodePath,'utf8'),bambu=config.engineKey===BAMBU_ENGINE_KEY;
-      verifyNativeLayerGcode({gcode,customGcodePoints:inputSnapshot.plate.customGcodePoints||[],pausePoints:inputSnapshot.plate.pausePoints||[],bambu});
-      verifyNativePauseEvents({gcode,pausePoints:inputSnapshot.plate.pausePoints||[],bambu});
-    }
+    await profileExecutionPhase(engineProfile, 'layerEventValidation', async () => {
+      if(inputSnapshot.plate.pausePoints?.length||inputSnapshot.plate.customGcodePoints?.length){
+        const gcode=await fs.readFile(result.gcodePath,'utf8'),bambu=config.engineKey===BAMBU_ENGINE_KEY;
+        verifyNativeLayerGcode({gcode,customGcodePoints:inputSnapshot.plate.customGcodePoints||[],pausePoints:inputSnapshot.plate.pausePoints||[],bambu});
+        verifyNativePauseEvents({gcode,pausePoints:inputSnapshot.plate.pausePoints||[],bambu});
+      }
+    });
     finishStage('slicingAndValidation');
+    logEngineProfile('completed');
     await sendProgress({
       stage: 'compiling-preview',
       progressPercent: 90,
@@ -375,6 +388,7 @@ export const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal, n
     finishStage('publication');
     log('info', 'slicer_run_completed', { runId: run.id, timingsMs });
   } catch (rawError) {
+    logEngineProfile('failed');
     const error = jobSignal.aborted && jobSignal.reason instanceof Error
       ? asWorkerError(jobSignal.reason)
       : asWorkerError(rawError);

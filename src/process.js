@@ -1,3 +1,4 @@
+import { profileExecutionPhase } from './execution-profile.js';
 import { spawn } from 'node:child_process';
 import { nativeCpuInvocation } from './native-cpu-affinity.js';
 
@@ -18,10 +19,11 @@ export const runProcess = async ({
   maximumLogBytes,
   signal,
   onOutput = null,
-  cpuAffinityCount = null
+  cpuAffinityCount = null,
+  profile = null
 }) => {
- const invocation = await nativeCpuInvocation({ command, args, count: cpuAffinityCount });
- return await new Promise((resolve, reject) => {
+ const invocation = await profileExecutionPhase(profile, 'affinitySetup', () => nativeCpuInvocation({ command, args, count: cpuAffinityCount }));
+ return await profileExecutionPhase(profile, 'nativeSubprocess', () => new Promise((resolve, reject) => {
   if (signal?.aborted) {
     reject(new WorkerError('Slicing was cancelled.', { code: 'slicer_worker_cancelled' }));
     return;
@@ -97,5 +99,5 @@ export const runProcess = async ({
       }
     ));
   });
-});
+}));
 };
