@@ -2,15 +2,16 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import fs from 'node:fs/promises';
 import {spawnSync} from 'node:child_process';
-import {validatePlan,trialOrder,parseCpuList,parseCounters,counterDelta,commandChecksum,prusaSettings,digestObject} from './contract.mjs';
+import {validatePlan,trialOrder,parseCpuList,parseCounters,counterDelta,commandChecksum,prusaSettings,digestObject,selectCpuSet} from './contract.mjs';
 import {buildFixture} from './fixture.mjs';
 const plan=JSON.parse(await fs.readFile(new URL('./plan.json',import.meta.url)));
 test('measurement plan cannot select mutable images, excessive resources or duplicate cases',()=>{
  assert.equal(validatePlan(plan),plan);
- for(const change of [{image:'ghcr.io/info380/am-pilot-slicer-core-bambu:latest'},{memoryBytes:8e9},{repeats:100},{maximumTrialSeconds:999},{cases:[...plan.cases.slice(0,7),plan.cases[0]]}])assert.throws(()=>validatePlan({...plan,...change}));
- const order=trialOrder(plan,'full');assert.equal(order.length,144);
+ for(const change of [{image:'ghcr.io/info380/am-pilot-slicer-core-bambu:latest'},{memoryBytes:8e9},{repeats:100},{maximumTrialSeconds:999},{cases:[...plan.cases.slice(0,8),plan.cases[0]]}])assert.throws(()=>validatePlan({...plan,...change}));
+ const order=trialOrder(plan,'full');assert.equal(order.length,162);
  for(const engine of plan.engines)for(const fixture of plan.fixtures)for(const c of plan.cases)assert.equal(order.filter(x=>x.engine===engine&&x.fixture===fixture&&x.id===c.id).length,3);
- assert.notDeepEqual(order.slice(0,8).map(x=>x.id),order.slice(48,56).map(x=>x.id));assert.equal(trialOrder(plan,'smoke').length,4);
+ assert.equal(trialOrder(plan,'full','bambu','unique-ten').length,27);assert.equal(trialOrder(plan,'smoke','prusa','single-dense').length,3);
+ assert.notDeepEqual(order.slice(0,9).map(x=>x.id),order.slice(54,63).map(x=>x.id));assert.equal(trialOrder(plan,'smoke').length,6);
 });
 test('fixtures separate repeated instances, distinct sources and a dense single model deterministically',()=>{
  const linked=buildFixture('linked-ten'),unique=buildFixture('unique-ten'),dense=buildFixture('single-dense');
@@ -34,11 +35,18 @@ test('output evidence keeps executable changes while separating only Prusa execu
 });
 test('benchmark entrypoints parse and validate without launching Docker',()=>{
  for(const file of ['contract.mjs','fixture.mjs','container.mjs','run.mjs'])assert.equal(spawnSync(process.execPath,['--check',`qualification/cpu-scaling/${file}`]).status,0);
- const result=spawnSync(process.execPath,['qualification/cpu-scaling/run.mjs','validate','full'],{encoding:'utf8'});assert.equal(result.status,0,result.stderr);assert.equal(JSON.parse(result.stdout).trials,144);
+ const result=spawnSync(process.execPath,['qualification/cpu-scaling/run.mjs','validate','full'],{encoding:'utf8'});assert.equal(result.status,0,result.stderr);assert.equal(JSON.parse(result.stdout).trials,162);
 });
 test('hosted measurements remain one bounded manual-only job without production credentials',async()=>{
  const workflow=await fs.readFile(new URL('../../.github/workflows/cpu-thread-measurements.yml',import.meta.url),'utf8');
  assert.match(workflow,/^  workflow_dispatch:/m);assert.doesNotMatch(workflow,/^  (?:push|pull_request|schedule):/m);
  assert.match(workflow,/timeout-minutes: 20/);assert.match(workflow,/contents: read/);assert.doesNotMatch(workflow,/matrix:|secrets\.|id-token: write|packages: write/);
  assert.match(workflow,/github.ref == 'refs\/heads\/main'/);assert.match(workflow,/retention-days: 7/);
+});
+
+test('distinct-core placement separates reported SMT siblings without guessing core IDs',()=>{
+ const topology=[{cpu:4,packageId:'0',coreId:'3'},{cpu:5,packageId:'0',coreId:'3'},{cpu:8,packageId:'0',coreId:'7'},{cpu:9,packageId:'0',coreId:'7'}];
+ assert.deepEqual(selectCpuSet(topology,'logical-first',2),[4,5,8,9]);assert.deepEqual(selectCpuSet(topology,'distinct-cores',2),[4,8]);
+ assert.throws(()=>selectCpuSet(topology.slice(0,2),'distinct-cores',2));
+ assert.throws(()=>selectCpuSet([{cpu:4,packageId:'0',coreId:'-1'}],'distinct-cores',1));
 });
