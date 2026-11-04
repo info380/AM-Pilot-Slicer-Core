@@ -373,3 +373,11 @@ before promotion. `slicer_normalization_cache` logs only run ID and aggregate
 hits/misses/evictions/entry/byte counts, with no source or tenant namespace.
 Deploy the API namespace contract before enabling this worker configuration.
 No Admin, database schema or printer communication change is required.
+
+## Native CPU and thread measurements
+
+The manual-only [CPU/thread diagnostic](docs/cpu-thread-measurements.md) measures
+an exact signed image without changing runtime code or production configuration.
+It separates CPU quota from each engine's execution policy and retains output,
+CPU, memory and observed-thread evidence. No automatic benchmark or deployment
+is added.

@@ -1,0 +1,49 @@
+name: Native CPU and thread measurements (manual)
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Full balanced repeats or a short harness smoke check
+        required: true
+        default: full
+        type: choice
+        options: [full, smoke]
+permissions:
+  contents: read
+concurrency:
+  group: native-cpu-thread-measurements
+  cancel-in-progress: false
+jobs:
+  measure:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.20.0
+      - uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159
+      - name: Verify the exact reviewed worker image signature
+        run: |
+          node qualification/cpu-scaling/run.mjs validate "$PROFILE"
+          image="$(node -p "require('./qualification/cpu-scaling/plan.json').image")"
+          tag="$(node -p "require('./qualification/cpu-scaling/plan.json').releaseTag")"
+          cosign verify --certificate-identity "https://github.com/info380/AM-Pilot-Slicer-Core/.github/workflows/release-bambu.yml@refs/tags/${tag}" --certificate-oidc-issuer https://token.actions.githubusercontent.com "$image" > /tmp/cpu-scaling-signature.json
+        env:
+          PROFILE: ${{ inputs.profile }}
+      - name: Measure sequential native Linux cases without production access
+        run: node qualification/cpu-scaling/run.mjs run "$PROFILE" "$RUNNER_TEMP/cpu-scaling-evidence"
+        env:
+          PROFILE: ${{ inputs.profile }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: native-cpu-thread-evidence
+          path: |
+            ${{ runner.temp }}/cpu-scaling-evidence/report.json
+            /tmp/cpu-scaling-signature.json
+          if-no-files-found: error
+          retention-days: 7
