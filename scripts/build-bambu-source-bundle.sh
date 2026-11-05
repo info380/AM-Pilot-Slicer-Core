@@ -20,9 +20,18 @@ cp "${BAMBU_NATIVE_ARCHIVE_PATH:?The verified native archive is required}" "$nat
 printf '%s  %s\n' "$(node -p "require('./native/bambu/runtime-plan.json').artifactTarSha256")" "$native_artifact" | sha256sum --check --strict
 cp native/bambu/runtime/native-build-status.json native/bambu/runtime/native-build-evidence.json \
   native/bambu/runtime/native-runtime-plan.json native/bambu/runtime/native-runtime.SHA256SUMS release-evidence/
-readonly ffmpeg_archive='release-evidence/FFmpeg-n7.0.2.tar.gz'
+readonly media_revision="$(node -p "require('./native/bambu/runtime-plan.json').media.nativeSourceRevision")"
+readonly media_source="release-evidence/AM-Pilot-Media-Build-${media_revision}.tar.gz"
 curl --fail --location --proto '=https' --tlsv1.2 \
-  'https://codeload.github.com/FFmpeg/FFmpeg/tar.gz/refs/tags/n7.0.2' --output "$ffmpeg_archive"
-printf '%s  %s\n' '5eb46d18d664a0ccadf7b0adee03bd3b7fa72893d667f36c69e202a807e6d533' "$ffmpeg_archive" | sha256sum --check --strict
+  "https://codeload.github.com/info380/AM-Pilot-Slicer-Core/tar.gz/${media_revision}" --output "$media_source"
+printf '%s  %s\n' "$(node -p "require('./native/bambu/runtime-plan.json').media.nativeSourceArchiveSha256")" "$media_source" | sha256sum --check --strict
+readonly media_artifact="release-evidence/Bambu-headless-media-${media_revision}.tar.gz"
+cp "${BAMBU_MEDIA_ARCHIVE_PATH:?The verified headless media archive is required}" "$media_artifact"
+printf '%s  %s\n' "$(node -p "require('./native/bambu/runtime-plan.json').media.artifactTarSha256")" "$media_artifact" | sha256sum --check --strict
+cp native/bambu/runtime/native-media-build-evidence.json release-evidence/
+readonly ffmpeg_archive="release-evidence/FFmpeg-n$(node -p "require('./native/bambu/media-build-plan.json').versionName").tar.gz"
+curl --fail --location --proto '=https' --tlsv1.2 \
+  "$(node -p "require('./native/bambu/media-build-plan.json').sourceUrl")" --output "$ffmpeg_archive"
+printf '%s  %s\n' "$(node -p "require('./native/bambu/media-build-plan.json').sourceSha256")" "$ffmpeg_archive" | sha256sum --check --strict
 (cd release-evidence && sha256sum ./*.tar.gz ./*.tar.bz2 > SHA256SUMS)
 node scripts/write-bambu-release-evidence.js

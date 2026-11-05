@@ -1,6 +1,6 @@
 {
   "schema": "am-pilot-bambu-native-runtime-plan",
-  "version": 1,
+  "version": 2,
   "repository": "info380/AM-Pilot-Slicer-Core",
   "repositoryId": 1355195265,
   "nativeSourceRevision": "df8d6e9a2de238a998d07d0b2a2ff207dea19f85",
@@ -17,11 +17,26 @@
   "headerSha256": "f80c5e704edf8ce888c25a861fac155a5bdc3828871d3a2371392a2f6f286bbf",
   "binarySha256": "571b42feea92b1173120efe5a1f10338fd2749b6e782abdf2dc928bb078bb14e",
   "libraries": {
-    "libavcodec.so.61": "d6e28ca599526d8f74d6402d2ef8a66aba6357bf09937a096ed3341b10a1f6ba",
-    "libavutil.so.59": "aeaee6d652c8d11d33f70959e908fe7670aba86f781e4e6fd354df3096011781",
-    "libswscale.so.8": "8b657e61dd350a748fcbfe545f36b49e45bd404550f0a630570921b874519c2a"
+    "libavcodec.so.61": "b94b4f8b544af7056e4d5c6964fa485f9c3a8df5d25c463b5520c186e6bc77b4",
+    "libavutil.so.59": "f54e551f051ddf3f9aa96adf3fc7a8022b00a7855ef8978cc1919c5f06537799",
+    "libswscale.so.8": "2754eb1694202dfc507f017217112673f82099ab80c2eaeb656c1a769b62fcb3"
   },
   "runtimeBaseImage": "ghcr.io/info380/am-pilot-slicer-core-bambu@sha256:3545ba6ac6accb118628c3e83e82d25400e525d80dda9e1de35fe8e353840385",
   "stockBinarySha256": "5bf97843cd8f4b4ca965f16201fa996a8cb049be43149135a6aee6a34e72e25a",
-  "controlBinarySha256": "9065076aff25330acd26a93ab809e9ca704bbee2d00c4e9bff148151e9ed4eda"
+  "controlBinarySha256": "9065076aff25330acd26a93ab809e9ca704bbee2d00c4e9bff148151e9ed4eda",
+  "media": {
+    "repository": "info380/AM-Pilot-Slicer-Core",
+    "repositoryId": 1355195265,
+    "nativeSourceRevision": "9726c6cf94c5f1df4f7a597d8f32bc7654852723",
+    "workflowPath": ".github/workflows/cpu-thread-measurements.yml",
+    "buildRunId": 42028645519,
+    "artifactId": 13415750237,
+    "artifactName": "bambu-headless-media-9726c6cf94c5f1df4f7a597d8f32bc7654852723",
+    "artifactZipSha256": "75a378d3c448ed5e80e29fb3f7b3a42ca4c6e6da1e8d9ae85408ffc1f648cba3",
+    "artifactTarSha256": "fa551e3cc4fee356c6ea751e2970cc751535f9f3bcf8268b2223f1d28e02e1be",
+    "sourceSha256": "5eb46d18d664a0ccadf7b0adee03bd3b7fa72893d667f36c69e202a807e6d533",
+    "buildPlanSha256": "7b6d7e2f3fcba0242f830ef37c646689b6005e6d64ed8a63400651be65b7c3fb",
+    "builderSha256": "78187a552e00d49c5ffbd2c2a2bfe99c00293c058541e8c8aa8b42764b4efbcc",
+    "nativeSourceArchiveSha256": "f22b3f8fac3c7ad957e9e1554e2bba2bc80b80cb52c440ed033241ed9f20e29d"
+  }
 }

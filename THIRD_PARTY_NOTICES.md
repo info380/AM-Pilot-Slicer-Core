@@ -64,8 +64,11 @@ in its SBOM and resolved from the snapshot identified in release-evidence.json.
 
 The exact library hashes are pinned in the native runtime plan. The official
 Bambu dependency recipe is retained in `deps/FFMPEG/FFMPEG.cmake` in the upstream
-source archive. The dependency build's configuration is embedded in the libraries;
-this build does not enable GPL or nonfree components. The exact FFmpeg source
+source archive. The dependency build's configuration is embedded in the libraries.
+The worker uses a reduced source-built closure with all codecs, parsers, bitstream
+filters, media formats, media filters, programs and network support disabled.
+These components are outside the headless FDM worker contract. This build does
+not enable GPL or nonfree components. The exact FFmpeg source
 archive is also published permanently with the release.
 
 ## Undici 8.12.3

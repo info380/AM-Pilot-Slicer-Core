@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 test('reviewed native diagnostic tools pass syntax checks without private inputs', () => {
-  for (const name of ['benchmark-worker.mjs', 'qualify-prototype.mjs', 'floating-geometry.mjs', 'toolpath-comparison.mjs', 'materialize-runtime.mjs']) {
+  for (const name of ['benchmark-worker.mjs', 'qualify-prototype.mjs', 'floating-geometry.mjs', 'toolpath-comparison.mjs', 'materialize-runtime.mjs', 'review-media-security.mjs']) {
     execFileSync(process.execPath, ['--check', fileURLToPath(new URL(name, import.meta.url))], { stdio: 'pipe' });
   }
   for (const name of ['build-prototype.sh', 'fetch-runtime.sh', 'qualify-image.sh', 'build-media-runtime.sh']) execFileSync('bash', ['-n', fileURLToPath(new URL(name, import.meta.url))], { stdio: 'pipe' });

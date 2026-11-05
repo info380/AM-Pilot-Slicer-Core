@@ -129,3 +129,12 @@ The signed image still needs exact-digest API engine registration and a verified
 worker rollout before it is active. Native packaging changes require a worker
 redeploy; no API or Admin redeploy is required when the protocol and capabilities
 remain unchanged. Keep the production worker on its current one-CPU plan.
+
+The runtime plan requires a separate source-built FFmpeg closure, with all media
+parsers/codecs, bitstream filters, formats, filters, devices, programs and network
+support disabled. Build configuration and empty component registries are verified
+alongside every library hash. A fresh official NVD CPE feed is checked against
+reviewed source/build exclusions; unknown high/critical or unscored findings block
+release. This is exclusion of code that is absent from the shipped closure, not
+a severity waiver. The release retains the advisory feed, review and a native
+SPDX supplement alongside the OCI SBOM and ordinary image vulnerability report.

@@ -20,7 +20,7 @@ verify_sha "$archive" "$(value artifactTarSha256)"
 mkdir -p "$controls/control/bin" "$controls/stock/bin"
 tar -xOf "$archive" ./bin/control > "$controls/control/bin/bambu-studio"
 base_container="$(docker create "$(value runtimeBaseImage)")"
-docker cp "$base_container:/opt/bambu/bin/bambu-studio" "$controls/stock/bin/bambu-studio"
+docker cp "$base_container:/opt/bambu/bin/." "$controls/stock/bin/"
 verify_sha "$controls/control/bin/bambu-studio" "$(value controlBinarySha256)"
 verify_sha "$controls/stock/bin/bambu-studio" "$(value stockBinarySha256)"
 cp -R native/bambu/runtime/native-lib "$controls/lib"
@@ -28,10 +28,12 @@ for label in control stock; do
   # Native CLI resource lookup is relative to the executable. All three builds
   # must use the same installed profiles, including their CLI safety limits.
   ln -s /opt/bambu/resources "$controls/$label/resources"
+  libraries='/native-controls/lib:/opt/bambu/bin'
+  if [[ "$label" == stock ]]; then libraries='/native-controls/stock/bin:/opt/bambu/bin'; fi
   cat > "$controls/$label-AppRun" <<EOF
 #!/bin/sh
 set -eu
-export LD_LIBRARY_PATH=/native-controls/lib:/opt/bambu/bin
+export LD_LIBRARY_PATH=$libraries
 export LC_ALL=C
 exec /native-controls/$label/bin/bambu-studio "\$@"
 EOF
