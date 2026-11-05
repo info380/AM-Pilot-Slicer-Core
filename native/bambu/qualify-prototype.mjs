@@ -10,7 +10,7 @@ import { buildPlateObjectTransform } from '../../src/transform.js';
 import { resolveBambuPreset } from '../../src/bambu-presets.js';
 import { inspectBambuOutput } from '../../src/bambu-engine.js';
 import { runProcess } from '../../src/process.js';
-import { summarizeToolpaths, compareToolpaths } from './toolpath-comparison.mjs';
+import { summarizeToolpaths, compareToolpaths, executableCommandChecksum } from './toolpath-comparison.mjs';
 
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const pose = (x = 0, y = 0, z = 0) => ({ positionMm: { x, y, z }, rotationDeg: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 } });
@@ -100,7 +100,7 @@ export async function qualify({ control, candidate, official, resources, output,
       const settings = JSON.parse(strFromU8(files['Metadata/project_settings.config']));
       const log = await fs.readFile(logFile, 'utf8'), gcode = strFromU8(checked.gcode);
       if (spec.expectedSharedLinks !== undefined) assert.equal((log.match(/found shared object from/g) ?? []).length, spec.expectedSharedLinks, spec.id + ': fixture must exercise native approximate equality');
-      const result = { label, nativeMs, settings, toolpaths: summarizeToolpaths(gcode), visibilityPasses: (log.match(/raycast visibility of/g) ?? []).length / 2, reuseHits: (log.match(/reused equivalent object visibility/g) ?? []).length, archiveSha256: sha(archive) };
+      const result = { label, nativeMs, settings, toolpaths: summarizeToolpaths(gcode), executableCommandsSha256: executableCommandChecksum(gcode), visibilityPasses: (log.match(/raycast visibility of/g) ?? []).length / 2, reuseHits: (log.match(/reused equivalent object visibility/g) ?? []).length, archiveSha256: sha(archive) };
       const ironing = Object.values(result.toolpaths.ironingByObject);
       if (spec.id !== 'shared-negative-volumes') {
         assert.equal(ironing.length, spec.count ?? 3, spec.id + ': every modifier must produce ironing');
@@ -114,6 +114,7 @@ export async function qualify({ control, candidate, official, resources, output,
     }
     for (const result of results.slice(1)) {
       assert.deepEqual(result.settings, results[0].settings, spec.id + ': native settings changed');
+      assert.equal(result.executableCommandsSha256, results[0].executableCommandsSha256, spec.id + ': executable native commands changed');
       assert.deepEqual(compareToolpaths(results[0].toolpaths, result.toolpaths), { layersMatch: true, seamsMatch: true, changedFeatureLayers: [] }, spec.id + ': native geometry or seams changed');
     }
     const row = { id: spec.id, inputSha256: sha(plate), layers: results[0].toolpaths.layers.length, settingsMatch: preflight ? null : true, seamsMatch: preflight ? null : true, depositedGeometryMatch: preflight ? null : true, runs: results.map(({ settings, toolpaths, ...result }) => ({ ...result, settingsCount: Object.keys(settings).length, outerWallStarts: toolpaths.outerWallStarts, ironingByObject: toolpaths.ironingByObject })) };

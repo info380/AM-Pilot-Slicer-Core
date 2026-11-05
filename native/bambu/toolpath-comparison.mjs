@@ -3,7 +3,11 @@ import { createHash } from 'node:crypto';
 
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const rounded = value => Number(value.toFixed(8));
-const point = position => ['X', 'Y', 'Z'].map(axis => rounded(position[axis]));
+const point = (position, offset) => ['X', 'Y', 'Z'].map(axis => rounded(position[axis] + offset[axis]));
+
+// Full executable sequence, including feedrate, acceleration, travel and layer
+// events. Only comments and M73 display-progress updates are excluded.
+export const executableCommandChecksum = gcode => createHash('sha256').update(gcode.split(/\r?\n/).map(line => line.split(';')[0].trim()).filter(line => line && !/^M73(?:\s|$)/.test(line)).join('\n')).digest('hex');
 
 // Compare deposited geometry independently of ordering and progress comments.
 // Outer-wall path starts are compared separately: identical segment sets alone
@@ -11,6 +15,7 @@ const point = position => ['X', 'Y', 'Z'].map(axis => rounded(position[axis]));
 // direction, start/end and center/radius parameters; no tessellation is used.
 export function summarizeToolpaths(gcode, { retainFloatingSegments = false } = {}) {
   let position = { X: 0, Y: 0, Z: 0 }, absolute = true, relativeE = false, extrusion = 0;
+  const offset = { X: 0, Y: 0, Z: 0 };
   let feature = 'unknown', layer = -1, boundary = true, object = null;
   const groups = new Map(), seams = [], layers = [], ironingByObject = {}, floatingSegments = {};
   for (const line of gcode.split('\n')) {
@@ -33,7 +38,7 @@ export function summarizeToolpaths(gcode, { retainFloatingSegments = false } = {
     }
     if (command === 'G92') {
       extrusion = values.E ?? extrusion;
-      for (const axis of ['X', 'Y', 'Z']) position[axis] = values[axis] ?? position[axis];
+      for (const axis of ['X', 'Y', 'Z']) if (axis in values) { offset[axis] += position[axis] - values[axis]; position[axis] = values[axis]; }
       continue;
     }
     const end = Object.fromEntries(['X', 'Y', 'Z'].map(axis => [axis, absolute ? values[axis] ?? position[axis] : position[axis] + (values[axis] ?? 0)]));
@@ -43,7 +48,7 @@ export function summarizeToolpaths(gcode, { retainFloatingSegments = false } = {
     const arc = ['G2', 'G3'].includes(command);
     if (arc) assert(['I', 'J', 'K', 'R'].some(axis => axis in values), 'Native arc lacks center/radius');
     if (layer >= 0 && deltaE > 0 && (moved || arc)) {
-      const startPoint = point(position), endPoint = point(end), key = `${layer}:${feature}`;
+      const startPoint = point(position, offset), endPoint = point(end, offset), key = `${layer}:${feature}`;
       if (feature === 'Outer wall' && boundary) seams.push(JSON.stringify([layer, startPoint, endPoint]));
       if (feature === 'Ironing') {
         assert(object !== null, 'Ironing needs native object identity');

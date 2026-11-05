@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { summarizeToolpaths, compareToolpaths } from './toolpath-comparison.mjs';
+import { summarizeToolpaths, compareToolpaths, executableCommandChecksum } from './toolpath-comparison.mjs';
 
 const prefix = 'G90\nM83\n; CHANGE_LAYER\n; Z_HEIGHT: 0.2\nG1 Z.2\n';
 const wall = (x, reverse = false) => `G1 X${x} Y0\n; FEATURE: Outer wall\n${reverse ? `G1 X${x} Y1 E.1\nG1 X${x + 1} Y1 E.1\nG1 X${x + 1} Y0 E.1\nG1 X${x} Y0 E.1` : `G1 X${x + 1} Y0 E.1\nG1 X${x + 1} Y1 E.1\nG1 X${x} Y1 E.1\nG1 X${x} Y0 E.1`}\n`;
@@ -45,4 +45,17 @@ test('malformed native coordinates fail closed', () => {
   for (const value of ['NaN', 'Infinity', '1e3']) assert.throws(() => summarizeToolpaths((prefix + wall(0)).replace('X1 Y0 E.1', `X${value} Y0 E.1`)), /Unsupported native movement/);
   assert.throws(() => summarizeToolpaths((prefix + wall(0)).replace('X1 Y0 E.1', 'X1 X2 Y0 E.1')), /Duplicate native/);
   assert.throws(() => summarizeToolpaths((prefix + wall(0)).replace('G1 X1 Y0 E.1', 'G2 X1 Y0 E.1')), /lacks center/);
+});
+
+test('coordinate resets retain physical placement instead of hiding a shift', () => {
+  const reference = summarizeToolpaths(prefix + wall(0));
+  const reset = prefix + 'G92 X100 Y200\nG1 X100 Y200\n; FEATURE: Outer wall\nG1 X101 Y200 E.1\nG1 X101 Y201 E.1\nG1 X100 Y201 E.1\nG1 X100 Y200 E.1\n';
+  assert.deepEqual(compareToolpaths(reference, summarizeToolpaths(reset)), { layersMatch: true, seamsMatch: true, changedFeatureLayers: [] });
+  assert(compareToolpaths(reference, summarizeToolpaths(prefix + 'G92 X100 Y200\n' + wall(0))).changedFeatureLayers.length);
+});
+
+test('the executable checksum retains speed, acceleration, travel and pauses', () => {
+  const code = prefix + 'M204 S1000\n' + wall(0) + 'M400 U1\n';
+  assert.equal(executableCommandChecksum(code), executableCommandChecksum('; generated later\nM73 P50 R20\n' + code));
+  for (const changed of [code.replace('S1000', 'S2000'), code.replace('G1 X0 Y0', 'G1 X0 Y0 F1000'), code.replace('M400 U1', 'M400'), code.replace('X1 Y0 E.1', 'X1 Y0 E.1 F500')]) assert.notEqual(executableCommandChecksum(code), executableCommandChecksum(changed));
 });

@@ -1,0 +1,441 @@
+{
+  "schema": "am-pilot-native-seam-prototype-evidence",
+  "version": 1,
+  "measuredAt": "2026-11-05T11:43:13.442854+00:00",
+  "status": "offline-qualified-cloud-benchmark-pending",
+  "productionActivation": false,
+  "privateCustomerDataIncluded": false,
+  "compiler": {
+    "sourceRevision": "df8d6e9a2de238a998d07d0b2a2ff207dea19f85",
+    "runUrl": "https://github.com/info380/AM-Pilot-Slicer-Core/actions/runs/42004697741",
+    "artifactId": 13406754974,
+    "artifactDigest": "sha256:fa0f8107995b9b557bc87570d1c8a42b36a85e992de4f01e16eb4e0653d78446",
+    "binaryChecksums": {
+      "bin/control": "9065076aff25330acd26a93ab809e9ca704bbee2d00c4e9bff148151e9ed4eda",
+      "bin/candidate": "571b42feea92b1173120efe5a1f10338fd2749b6e782abdf2dc928bb078bb14e"
+    },
+    "buildHost": {
+      "platform": "linux",
+      "arch": "x64",
+      "cpus": 4,
+      "memoryBytes": 16765382656
+    },
+    "patchSha256": "0ba011273e97bab9a72dc754fe069dbf0746067abcd359fcf180609d627412f6"
+  },
+  "qualification": {
+    "environment": "Offline Linux amd64 runtime emulated on the local Mac; native process affinity one CPU",
+    "qualifierSha256": "f246683f9a4a9f76539f2ec38b7540ddc568d9de5dc06a465771ecbc0d5d76ff",
+    "comparatorSha256": "0a819ec72bded1d25ae05b36f0b4ca3ca89bfc4f5ce243c11233f4a7239c5db2",
+    "nativeCases": 14,
+    "nativeExecutions": 42,
+    "executableCommandsMatch": true,
+    "caseResults": [
+      {
+        "id": "aligned-ten-ironing",
+        "layers": 30,
+        "settingsMatch": true,
+        "seamsMatch": true,
+        "depositedGeometryMatch": true,
+        "executions": [
+          {
+            "label": "official",
+            "visibilityPasses": 10,
+            "reuseHits": 0,
+            "executableCommandsSha256": "55a8e7164a8582f8661906f150ebb858ab1006851c3f15e273fc3ca1143c7b55"
+          },
+          {
+            "label": "control",
+            "visibilityPasses": 10,
+            "reuseHits": 0,
+            "executableCommandsSha256": "55a8e7164a8582f8661906f150ebb858ab1006851c3f15e273fc3ca1143c7b55"
+          },
+          {
+            "label": "candidate",
+            "visibilityPasses": 1,
+            "reuseHits": 9,
+            "executableCommandsSha256": "55a8e7164a8582f8661906f150ebb858ab1006851c3f15e273fc3ca1143c7b55"
+          }
+        ]
+      },
+      {
+        "id": "nearest-linked",
+        "layers": 30,
+        "settingsMatch": true,
+        "seamsMatch": true,
+        "depositedGeometryMatch": true,
+        "executions": [
+          {
+            "label": "official",
+            "visibilityPasses": 3,
+            "reuseHits": 0,
+            "executableCommandsSha256": "5e74bbe81ef5b3adc8b0f0a436e8ffd59b817ea96bb296964caf159f74e9e6ce"
+          },
+          {
+            "label": "control",
+            "visibilityPasses": 3,
+            "reuseHits": 0,
+            "executableCommandsSha256": "5e74bbe81ef5b3adc8b0f0a436e8ffd59b817ea96bb296964caf159f74e9e6ce"
+          },
+          {
+            "label": "candidate",
+            "visibilityPasses": 1,
+            "reuseHits": 2,
+            "executableCommandsSha256": "5e74bbe81ef5b3adc8b0f0a436e8ffd59b817ea96bb296964caf159f74e9e6ce"
+          }
+        ]
+      },
+      {
+        "id": "random-linked",
+        "layers": 30,
+        "settingsMatch": true,
+        "seamsMatch": true,
+        "depositedGeometryMatch": true,
+        "executions": [
+          {
+            "label": "official",
+            "visibilityPasses": 0,
+            "reuseHits": 0,
+            "executableCommandsSha256": "6a92c419bd1f5f62d8b0708c1cfeb4362bd1f086ffbe46f35a724fad74b9e73b"
+          },
+          {
+            "label": "control",
+            "visibilityPasses": 0,
+            "reuseHits": 0,
+            "executableCommandsSha256": "6a92c419bd1f5f62d8b0708c1cfeb4362bd1f086ffbe46f35a724fad74b9e73b"
+          },
+          {
+            "label": "candidate",
+            "visibilityPasses": 0,
+            "reuseHits": 0,
+            "executableCommandsSha256": "6a92c419bd1f5f62d8b0708c1cfeb4362bd1f086ffbe46f35a724fad74b9e73b"
+          }
+        ]
+      },
+      {
+        "id": "rear-linked",
+        "layers": 30,
+        "settingsMatch": true,
+        "seamsMatch": true,
+        "depositedGeometryMatch": true,
+        "executions": [
+          {
+            "label": "official",
+            "visibilityPasses": 0,
+            "reuseHits": 0,
+            "executableCommandsSha256": "58889343c1bed019c9ac7657d4755b768127f33c09a118509729a6fb865321b2"
+          },
+          {
+            "label": "control",
+            "visibilityPasses": 0,
+            "reuseHits": 0,
+            "executableCommandsSha256": "58889343c1bed019c9ac7657d4755b768127f33c09a118509729a6fb865321b2"
+          },
+          {
+            "label": "candidate",
+            "visibilityPasses": 0,
+            "reuseHits": 0,
+            "executableCommandsSha256": "58889343c1bed019c9ac7657d4755b768127f33c09a118509729a6fb865321b2"
+          }
+        ]
+      },
+      {
+        "id": "rotated-and-scaled",
+        "layers": 30,
+        "settingsMatch": true,
+        "seamsMatch": true,
+        "depositedGeometryMatch": true,
+        "executions": [
+          {
+            "label": "official",
+            "visibilityPasses": 3,
+            "reuseHits": 0,
+            "executableCommandsSha256": "3477bf3fcf5c47c1468c7096db63e7e8cfca4585ba99f41bdf7f358c818a9dd8"
+          },
+          {
+            "label": "control",
+            "visibilityPasses": 3,
+            "reuseHits": 0,
+            "executableCommandsSha256": "3477bf3fcf5c47c1468c7096db63e7e8cfca4585ba99f41bdf7f358c818a9dd8"
+          },
+          {
+            "label": "candidate",
+            "visibilityPasses": 3,
+            "reuseHits": 0,
+            "executableCommandsSha256": "3477bf3fcf5c47c1468c7096db63e7e8cfca4585ba99f41bdf7f358c818a9dd8"
+          }
+        ]
+      },
+      {
+        "id": "different-modifier",
+        "layers": 30,
+        "settingsMatch": true,
+        "seamsMatch": true,
+        "depositedGeometryMatch": true,
+        "executions": [
+          {
+            "label": "official",
+            "visibilityPasses": 3,
+            "reuseHits": 0,
+            "executableCommandsSha256": "1dc916d7c0cf5fc3b02c80120591e334bc13cfb5ba0566b7efe7b5d3e645e5b8"
+          },
+          {
+            "label": "control",
+            "visibilityPasses": 3,
+            "reuseHits": 0,
+            "executableCommandsSha256": "1dc916d7c0cf5fc3b02c80120591e334bc13cfb5ba0566b7efe7b5d3e645e5b8"
+          },
+          {
+            "label": "candidate",
+            "visibilityPasses": 3,
+            "reuseHits": 0,
+            "executableCommandsSha256": "1dc916d7c0cf5fc3b02c80120591e334bc13cfb5ba0566b7efe7b5d3e645e5b8"
+          }
+        ]
+      },
+      {
+        "id": "different-object-settings",
+        "layers": 30,
+        "settingsMatch": true,
+        "seamsMatch": true,
+        "depositedGeometryMatch": true,
+        "executions": [
+          {
+            "label": "official",
+            "visibilityPasses": 3,
+            "reuseHits": 0,
+            "executableCommandsSha256": "f3abbf9259de776db9db03e50971cebf8c3201e07cdab4f6105535ca76e4edff"
+          },
+          {
+            "label": "control",
+            "visibilityPasses": 3,
+            "reuseHits": 0,
+            "executableCommandsSha256": "f3abbf9259de776db9db03e50971cebf8c3201e07cdab4f6105535ca76e4edff"
+          },
+          {
+            "label": "candidate",
+            "visibilityPasses": 3,
+            "reuseHits": 0,
+            "executableCommandsSha256": "f3abbf9259de776db9db03e50971cebf8c3201e07cdab4f6105535ca76e4edff"
+          }
+        ]
+      },
+      {
+        "id": "independent-identical",
+        "layers": 30,
+        "settingsMatch": true,
+        "seamsMatch": true,
+        "depositedGeometryMatch": true,
+        "executions": [
+          {
+            "label": "official",
+            "visibilityPasses": 3,
+            "reuseHits": 0,
+            "executableCommandsSha256": "5e74bbe81ef5b3adc8b0f0a436e8ffd59b817ea96bb296964caf159f74e9e6ce"
+          },
+          {
+            "label": "control",
+            "visibilityPasses": 3,
+            "reuseHits": 0,
+            "executableCommandsSha256": "5e74bbe81ef5b3adc8b0f0a436e8ffd59b817ea96bb296964caf159f74e9e6ce"
+          },
+          {
+            "label": "candidate",
+            "visibilityPasses": 3,
+            "reuseHits": 0,
+            "executableCommandsSha256": "5e74bbe81ef5b3adc8b0f0a436e8ffd59b817ea96bb296964caf159f74e9e6ce"
+          }
+        ]
+      },
+      {
+        "id": "approximately-equal-model-transform",
+        "layers": 30,
+        "settingsMatch": true,
+        "seamsMatch": true,
+        "depositedGeometryMatch": true,
+        "executions": [
+          {
+            "label": "official",
+            "visibilityPasses": 3,
+            "reuseHits": 0,
+            "executableCommandsSha256": "5e74bbe81ef5b3adc8b0f0a436e8ffd59b817ea96bb296964caf159f74e9e6ce"
+          },
+          {
+            "label": "control",
+            "visibilityPasses": 3,
+            "reuseHits": 0,
+            "executableCommandsSha256": "5e74bbe81ef5b3adc8b0f0a436e8ffd59b817ea96bb296964caf159f74e9e6ce"
+          },
+          {
+            "label": "candidate",
+            "visibilityPasses": 3,
+            "reuseHits": 0,
+            "executableCommandsSha256": "5e74bbe81ef5b3adc8b0f0a436e8ffd59b817ea96bb296964caf159f74e9e6ce"
+          }
+        ]
+      },
+      {
+        "id": "approximately-equal-modifier-transform",
+        "layers": 30,
+        "settingsMatch": true,
+        "seamsMatch": true,
+        "depositedGeometryMatch": true,
+        "executions": [
+          {
+            "label": "official",
+            "visibilityPasses": 3,
+            "reuseHits": 0,
+            "executableCommandsSha256": "5e74bbe81ef5b3adc8b0f0a436e8ffd59b817ea96bb296964caf159f74e9e6ce"
+          },
+          {
+            "label": "control",
+            "visibilityPasses": 3,
+            "reuseHits": 0,
+            "executableCommandsSha256": "5e74bbe81ef5b3adc8b0f0a436e8ffd59b817ea96bb296964caf159f74e9e6ce"
+          },
+          {
+            "label": "candidate",
+            "visibilityPasses": 3,
+            "reuseHits": 0,
+            "executableCommandsSha256": "5e74bbe81ef5b3adc8b0f0a436e8ffd59b817ea96bb296964caf159f74e9e6ce"
+          }
+        ]
+      },
+      {
+        "id": "painted-seam-enforcer",
+        "layers": 30,
+        "settingsMatch": true,
+        "seamsMatch": true,
+        "depositedGeometryMatch": true,
+        "executions": [
+          {
+            "label": "official",
+            "visibilityPasses": 3,
+            "reuseHits": 0,
+            "executableCommandsSha256": "fce9119607b4b03dd152c98f0e56a974ec95374fb4842756cceafec47106b134"
+          },
+          {
+            "label": "control",
+            "visibilityPasses": 3,
+            "reuseHits": 0,
+            "executableCommandsSha256": "fce9119607b4b03dd152c98f0e56a974ec95374fb4842756cceafec47106b134"
+          },
+          {
+            "label": "candidate",
+            "visibilityPasses": 1,
+            "reuseHits": 2,
+            "executableCommandsSha256": "fce9119607b4b03dd152c98f0e56a974ec95374fb4842756cceafec47106b134"
+          }
+        ]
+      },
+      {
+        "id": "painted-seam-blocker",
+        "layers": 30,
+        "settingsMatch": true,
+        "seamsMatch": true,
+        "depositedGeometryMatch": true,
+        "executions": [
+          {
+            "label": "official",
+            "visibilityPasses": 3,
+            "reuseHits": 0,
+            "executableCommandsSha256": "f1abe750728fc932330e499ebd843ff5253b049ff29f615ff79548db08e3ede9"
+          },
+          {
+            "label": "control",
+            "visibilityPasses": 3,
+            "reuseHits": 0,
+            "executableCommandsSha256": "f1abe750728fc932330e499ebd843ff5253b049ff29f615ff79548db08e3ede9"
+          },
+          {
+            "label": "candidate",
+            "visibilityPasses": 1,
+            "reuseHits": 2,
+            "executableCommandsSha256": "f1abe750728fc932330e499ebd843ff5253b049ff29f615ff79548db08e3ede9"
+          }
+        ]
+      },
+      {
+        "id": "distinct-painted-seams",
+        "layers": 30,
+        "settingsMatch": true,
+        "seamsMatch": true,
+        "depositedGeometryMatch": true,
+        "executions": [
+          {
+            "label": "official",
+            "visibilityPasses": 3,
+            "reuseHits": 0,
+            "executableCommandsSha256": "c5bf4ac238edbb5d61998fca82ec452ae0aa66024069581860453fa74b013cbb"
+          },
+          {
+            "label": "control",
+            "visibilityPasses": 3,
+            "reuseHits": 0,
+            "executableCommandsSha256": "c5bf4ac238edbb5d61998fca82ec452ae0aa66024069581860453fa74b013cbb"
+          },
+          {
+            "label": "candidate",
+            "visibilityPasses": 3,
+            "reuseHits": 0,
+            "executableCommandsSha256": "c5bf4ac238edbb5d61998fca82ec452ae0aa66024069581860453fa74b013cbb"
+          }
+        ]
+      },
+      {
+        "id": "shared-negative-volumes",
+        "layers": 30,
+        "settingsMatch": true,
+        "seamsMatch": true,
+        "depositedGeometryMatch": true,
+        "executions": [
+          {
+            "label": "official",
+            "visibilityPasses": 3,
+            "reuseHits": 0,
+            "executableCommandsSha256": "1de90d8f4dcec4b6e3db4e6fb39c0fedae6f93354703aaa2b444ea6f274e7389"
+          },
+          {
+            "label": "control",
+            "visibilityPasses": 3,
+            "reuseHits": 0,
+            "executableCommandsSha256": "1de90d8f4dcec4b6e3db4e6fb39c0fedae6f93354703aaa2b444ea6f274e7389"
+          },
+          {
+            "label": "candidate",
+            "visibilityPasses": 1,
+            "reuseHits": 2,
+            "executableCommandsSha256": "1de90d8f4dcec4b6e3db4e6fb39c0fedae6f93354703aaa2b444ea6f274e7389"
+          }
+        ]
+      }
+    ],
+    "existingNativeRegression": {
+      "passed": 32,
+      "skipped": 0
+    },
+    "fullWorkerCheck": {
+      "passed": 136,
+      "skipped": 0,
+      "releaseContract": "passed"
+    },
+    "newToolingContracts": {
+      "passed": 2
+    },
+    "cppLifetimeEligibilitySanitizers": [
+      "ASan",
+      "UBSan"
+    ],
+    "realPlateComparisonPolicy": {
+      "privateEvidenceRetained": true,
+      "strictSeamsModifiersOtherDepositedFeatures": true,
+      "existingNativeFloatingShellVariation": true,
+      "earlierRejectedRepeatsRetained": true,
+      "limitsDerivedFromUnmodifiedSameRecipeControlsOnly": true,
+      "physicalPrintVerified": false
+    }
+  },
+  "cloudWorkerMeasurement": {
+    "status": "pending",
+    "reason": "Native Safari activity guard prevented opening the Render shell; no worker mutation or deployment occurred"
+  }
+}

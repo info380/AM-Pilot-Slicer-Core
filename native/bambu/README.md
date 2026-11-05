@@ -2,6 +2,8 @@
 
 This is a diagnostic candidate, not an admitted production runtime. It leaves
 the worker, printer settings, source geometry, modifiers and seam choices intact.
+See [corresponding source and notices](SOURCE.md) for the exact source-built
+control and modified candidate, separately from existing OCI release offers.
 
 The patch reuses immutable occlusion and identical painted seam-region data only
 when Bambu has already established a native shared-object relation and the
@@ -61,6 +63,10 @@ arc parameters and per-contour outer-wall starts. It follows coordinate/extrusio
 modes and resets, and rejects unsupported arc planes/center modes. Reordering is
 separated from geometry and seam changes. Layer heights and extrusion amounts
 remain part of the comparison.
+The synthetic cases additionally require identical executable command sequences,
+including feeds, acceleration and travel; only comments and M73 display progress
+are excluded. Real-plate command checksums are recorded separately because its
+unchanged floating-shell feature already varies between native executions.
 
 `benchmark-worker.mjs` accepts a private input packet in the existing worker.
 It verifies the packet's runtime-source/binary identities, one-CPU/two-GB limits,
@@ -68,12 +74,37 @@ nice priority and single-CPU native affinity. It aborts when other Bambu/Prusa
 native work appears, limits each invocation to one minute and the diagnostic to
 six minutes, and cleans its temporary slice files. One official run and three
 alternating control/candidate pairs use the unchanged prepared plate and all
-575 native settings. It checks embedded MD5, the authoritative pause/custom-code
-verifiers, 90 layers, each part's ironing, seam starts and deposited features.
+native settings. The private input packet supplies explicit expectations derived
+from the frozen reference: object and layer counts, native setting count,
+visibility calculations/reuse and ironing moves per part. Missing expectations
+fail closed. It checks embedded MD5, the authoritative pause/custom-code verifiers,
+each part's ironing, seam starts and deposited features.
 The only permitted feature variation is the previously documented native
-floating-shell branch. Continuous-segment distance bounds, extrusion and length
-deltas must stay within explicit limits from the retained reference study; the
-input packet supplies those limits and its evidence reference. This is recorded
-explicitly rather than treated as byte identity or physical qualification.
+floating-shell branch. A frozen feature-wide envelope must come exclusively from
+repeated unmodified controls with the same input, all native settings and bound
+executable identities. Continuous-segment distance bounds, extrusion and length
+deltas must remain within that envelope. The input packet supplies these limits
+and their evidence reference. The `collectUnmodifiedBaseline` mode admits no
+candidate binary and records the control observations separately.
+
+Two earlier comparison gates rejected repeats: one rejected a candidate for an
+extrusion difference then reproduced by unchanged controls; a per-layer gate
+subsequently rejected an unchanged control on another layer. The final gate uses
+the control-only feature envelope and retains both failures in the private
+evidence. It keeps exact checks for seams, modifiers and all other deposited
+features. This measures existing native nondeterminism; it neither fixes that
+behavior nor establishes physical print quality or byte identity.
 Do not upload its private input packet or
 customer archives to this repository or its workflows.
+
+Before production activation:
+
+1. Complete the balanced, matched-recipe benchmark on the unchanged one-CPU
+   worker and verify its actual resource limits, output checks and cleanup.
+2. Qualify a worker image with the corresponding source, notices, SBOM,
+   provenance, signatures, vulnerability scan and required runtime admission.
+3. Verify a complete Slice attempt, preview, every instance's modifiers and
+   layer events at the exact deployed revision before any printer operation.
+
+This diagnostic milestone changes no API or Admin code and needs neither
+deployment. The optimization is not enabled in production by merging these tools.
