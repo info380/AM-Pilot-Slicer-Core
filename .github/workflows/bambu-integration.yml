@@ -5,6 +5,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  actions: read
 jobs:
   native-archive:
     runs-on: ubuntu-22.04
@@ -41,6 +42,15 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.20.0
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Verify and materialize the pinned native runtime
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash native/bambu/fetch-runtime.sh "$RUNNER_TEMP/bambu-runtime-download" native/bambu/runtime
       - name: Build the isolated native Bambu worker
         run: docker build --file Dockerfile.bambu --tag bambu-worker:test .
       - name: Test all variants without network or a writable root filesystem
