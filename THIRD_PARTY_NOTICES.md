@@ -42,19 +42,39 @@ inventory/SBOM.
 - Source archive SHA-256: `3c0d92559057709a2e500824acb1cfc4b93e0ef0a218c2e404e2ce466b0c7d4b`
 - Upstream Linux AppImage SHA-256: `69426a59682574591590f51c913d3889baa19252d1c8e9fcae2497eb0ed6bf92`
 
-The Bambu variant redistributes the unmodified upstream Linux executable and
-resources. The corresponding source archive includes upstream build scripts,
-dependency definitions, patches and license notices. It uses the separate Prusa
+Earlier Bambu releases redistributed the unmodified upstream Linux executable.
+The seam-visibility runtime is source-built from the exact upstream revision
+with AM Pilot's slice-local visibility reuse patch. `native/bambu/runtime-plan.json`
+pins the compiler workflow, preferred source, patch, binary and library hashes.
+The corresponding source archives include the exact native builder source,
+upstream build scripts, dependency definitions, patches and license notices.
+The installed profile resources are retained from the verified runtime base.
+It uses the separate Prusa
 runtime above only for source geometry normalization. Network printer plugins
 are not installed or used by the worker. Ubuntu package versions are recorded
-in its SBOM and resolved from the 20261002T000000Z Ubuntu snapshot.
+in its SBOM and resolved from the snapshot identified in release-evidence.json.
 
-## Undici 8.10.2
+## FFmpeg 7.0.2 (source-built Bambu runtime)
+
+- Project: <https://github.com/FFmpeg/FFmpeg>
+- Source tag: `n7.0.2`.
+- Source archive SHA-256: `5eb46d18d664a0ccadf7b0adee03bd3b7fa72893d667f36c69e202a807e6d533`.
+- Libraries: `libavcodec.so.61`, `libavutil.so.59`, `libswscale.so.8`.
+- License: GNU LGPL version 2.1 or later, as reported by these build artifacts.
+
+The exact library hashes are pinned in the native runtime plan. The official
+Bambu dependency recipe is retained in `deps/FFMPEG/FFMPEG.cmake` in the upstream
+source archive. The dependency build's configuration is embedded in the libraries;
+this build does not enable GPL or nonfree components. The exact FFmpeg source
+archive is also published permanently with the release.
+
+## Undici 8.12.3
 
 - Project: <https://github.com/nodejs/undici>
 - License: MIT
 - Exact package and integrity: `package-lock.json`.
 
 The headless Bambu image excludes the upstream desktop `resources/web` UI assets.
-Those browser components are not used by native slicing; the engine binary and
-profile resources remain unchanged. The complete upstream source is still supplied.
+Those browser components are not used by native slicing. The installed profile
+resources remain unchanged; the native executable carries the documented
+visibility patch. The complete upstream source is still supplied.

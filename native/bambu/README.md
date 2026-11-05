@@ -108,3 +108,24 @@ Before production activation:
 
 This diagnostic milestone changes no API or Admin code and needs neither
 deployment. The optimization is not enabled in production by merging these tools.
+
+## Signed runtime packaging
+
+`runtime-plan.json` selects the exact measured native artifact. `fetch-runtime.sh`
+requires its successful repository/workflow/source identity and ZIP checksum;
+`materialize-runtime.mjs` additionally verifies the tar, preferred build inputs,
+binary, dependencies and build status before creating a new image context. Existing
+contexts are rejected. `AppRun` selects this binary explicitly with its reviewed
+library closure; the runtime never selects the previous executable on failure.
+
+The release workflow tests the packaged image against the stock and source-built
+controls with identical installed profile resources. It retains 42 synthetic native
+executions and one-CPU/two-GB resource evidence, then publishes the complete native
+build and source archives permanently. Future materialization can use the retained
+tar with its exact plan through the explicit `from-tar` command; no automatic
+artifact-source substitution is performed when a workflow artifact expires.
+
+The signed image still needs exact-digest API engine registration and a verified
+worker rollout before it is active. Native packaging changes require a worker
+redeploy; no API or Admin redeploy is required when the protocol and capabilities
+remain unchanged. Keep the production worker on its current one-CPU plan.

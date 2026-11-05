@@ -1,7 +1,8 @@
-# Corresponding source for the diagnostic native prototype
+# Corresponding source for the source-built native runtime
 
 This source notice covers the control/candidate executables from the manual
-seam-visibility prototype build. They are separate from released OCI runtimes.
+seam-visibility prototype build. The release runtime plan explicitly selects
+its measured candidate for a new signed OCI release.
 The control is an unmodified source build; the candidate includes the
 slice-local visibility patch. Both use GNU AGPLv3-covered Bambu Studio code.
 
@@ -26,7 +27,9 @@ failed artifact is labelled failed and does not qualify a runtime. Diagnostic
 fixtures and benchmark helpers contain no private customer models; private
 input packets and customer archives are never part of the public build.
 
-Enabling this patch in an OCI release still requires that release's normal
-permanent source archives, notices, SBOM, provenance, signature, vulnerability
-scan and native capability qualification. Existing production source offers
-continue to cover their own exact release digests.
+Each applicable OCI release permanently publishes the exact native builder source,
+compiled artifact, upstream and FFmpeg source archives and native checksums,
+in addition to the ordinary notices, SBOM, provenance, signature, vulnerability
+scan and native capability qualification. Production qualification status is
+recorded separately for the exact image digest; source packaging does not grant it.
+Existing production source offers continue to cover their own exact release digests.

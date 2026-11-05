@@ -8,6 +8,12 @@ PrusaSlicer is Copyright (C) Prusa Research and contributors and is based on
 Slic3r by Alessandro Ranellucci and the RepRap community. PrusaSlicer is
 licensed under the GNU Affero General Public License, version 3.
 
-This product also includes fflate 0.8.2, Copyright (c) 2023 Arjun Barrett,
+This product also includes fflate 0.8.3, Copyright (c) 2023 Arjun Barrett,
 licensed under the MIT License. See node_modules/fflate/LICENSE at build time
 and the package source linked from THIRD_PARTY_NOTICES.md.
+
+The Bambu worker variant includes Bambu Studio 02.08.02.61, Copyright (C)
+Bambu Lab and contributors, under GNU AGPLv3. Its source-built native runtime
+includes AM Pilot's slice-local seam visibility reuse patch and FFmpeg 7.0.2
+libraries under GNU LGPLv2.1 or later. Exact source and build identities are
+published with each applicable release; see THIRD_PARTY_NOTICES.md.

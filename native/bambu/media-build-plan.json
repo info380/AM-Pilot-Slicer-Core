@@ -1,0 +1,11 @@
+{
+  "schema": "am-pilot-headless-bambu-media-build",
+  "version": 1,
+  "versionName": "7.0.2",
+  "sourceUrl": "https://codeload.github.com/FFmpeg/FFmpeg/tar.gz/refs/tags/n7.0.2",
+  "sourceSha256": "5eb46d18d664a0ccadf7b0adee03bd3b7fa72893d667f36c69e202a807e6d533",
+  "runner": "ubuntu-22.04",
+  "buildJobs": 4,
+  "libraries": ["libavcodec.so.61", "libavutil.so.59", "libswscale.so.8"],
+  "configure": ["--disable-programs", "--disable-doc", "--disable-static", "--enable-shared", "--disable-autodetect", "--disable-everything", "--disable-avdevice", "--disable-avfilter", "--disable-avformat", "--disable-swresample", "--disable-x86asm", "--disable-network", "--disable-debug", "--enable-avcodec", "--enable-avutil", "--enable-swscale"]
+}

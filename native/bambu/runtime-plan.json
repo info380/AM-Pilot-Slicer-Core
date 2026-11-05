@@ -1,0 +1,27 @@
+{
+  "schema": "am-pilot-bambu-native-runtime-plan",
+  "version": 1,
+  "repository": "info380/AM-Pilot-Slicer-Core",
+  "repositoryId": 1355195265,
+  "nativeSourceRevision": "df8d6e9a2de238a998d07d0b2a2ff207dea19f85",
+  "nativeSourceArchiveSha256": "2b075e4eace4f99470511c9449ba2596d0a9a5b5710883d512395a55cb2301c5",
+  "workflowPath": ".github/workflows/cpu-thread-measurements.yml",
+  "buildRunId": 42004697741,
+  "artifactId": 13406754974,
+  "artifactName": "bambu-seam-prototype-df8d6e9a2de238a998d07d0b2a2ff207dea19f85",
+  "artifactZipSha256": "fa0f8107995b9b557bc87570d1c8a42b36a85e992de4f01e16eb4e0653d78446",
+  "artifactTarSha256": "465c58e07aec39d5c27860022f81bfc97442072b5a8fe2c9b6998de87afba523",
+  "patchSha256": "0ba011273e97bab9a72dc754fe069dbf0746067abcd359fcf180609d627412f6",
+  "builderSha256": "1b3f3c4131778ca00df9441e89bfed0c8e0c08aab544916d9ea7a4d104e0aa34",
+  "buildPlanSha256": "6e91fe8fd5cd5796b9cef5eddcc907fcf7c7919e1a49a3158f7226b4831e01e7",
+  "headerSha256": "f80c5e704edf8ce888c25a861fac155a5bdc3828871d3a2371392a2f6f286bbf",
+  "binarySha256": "571b42feea92b1173120efe5a1f10338fd2749b6e782abdf2dc928bb078bb14e",
+  "libraries": {
+    "libavcodec.so.61": "d6e28ca599526d8f74d6402d2ef8a66aba6357bf09937a096ed3341b10a1f6ba",
+    "libavutil.so.59": "aeaee6d652c8d11d33f70959e908fe7670aba86f781e4e6fd354df3096011781",
+    "libswscale.so.8": "8b657e61dd350a748fcbfe545f36b49e45bd404550f0a630570921b874519c2a"
+  },
+  "runtimeBaseImage": "ghcr.io/info380/am-pilot-slicer-core-bambu@sha256:3545ba6ac6accb118628c3e83e82d25400e525d80dda9e1de35fe8e353840385",
+  "stockBinarySha256": "5bf97843cd8f4b4ca965f16201fa996a8cb049be43149135a6aee6a34e72e25a",
+  "controlBinarySha256": "9065076aff25330acd26a93ab809e9ca704bbee2d00c4e9bff148151e9ed4eda"
+}

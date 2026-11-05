@@ -25,6 +25,9 @@ accordance with GNU AGPLv3.
 Bambu worker releases (`bambu-v*`) additionally publish the exact Bambu Studio
 source archive and retain its upstream dependency/build definitions and notices.
 The Bambu image and Prusa image have separate immutable digests and evidence.
+Source-built Bambu releases additionally retain the exact native builder source,
+compiled build archive, FFmpeg source, patch and native build/checksum evidence.
+The release's native runtime plan identifies all of these immutable inputs.
 
 Diagnostic source-built Bambu prototypes are separate from OCI releases. Their
 exact source, patches and build definitions are identified in

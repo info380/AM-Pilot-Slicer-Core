@@ -8,7 +8,7 @@ on:
         required: true
         default: full
         type: choice
-        options: [full, smoke, seam-prototype]
+        options: [full, smoke, seam-prototype, seam-runtime-libraries]
       engine:
         description: Engine for this independent comparison
         required: true
@@ -28,7 +28,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   measure:
-    if: github.ref == 'refs/heads/main' && inputs.profile != 'seam-prototype'
+    if: github.ref == 'refs/heads/main' && (inputs.profile == 'full' || inputs.profile == 'smoke')
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -97,5 +97,28 @@ jobs:
             ${{ runner.temp }}/bambu-native-output/*.json
             ${{ runner.temp }}/bambu-native-output/*.patch
             ${{ runner.temp }}/bambu-native-output/native-prototype.tar.gz*
+          if-no-files-found: error
+          retention-days: 7
+
+  seam-runtime-libraries:
+    if: github.event_name == 'workflow_dispatch' && inputs.profile == 'seam-runtime-libraries'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.20.0
+      - name: Build headless native media library closure
+        run: bash native/bambu/build-media-runtime.sh "$RUNNER_TEMP/bambu-media-work" "$RUNNER_TEMP/bambu-media-output"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: bambu-headless-media-${{ github.sha }}
+          path: ${{ runner.temp }}/bambu-media-output/
           if-no-files-found: error
           retention-days: 7

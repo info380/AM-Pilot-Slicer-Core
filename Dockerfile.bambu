@@ -29,6 +29,16 @@ COPY package.json package-lock.json ./
 COPY src ./src
 COPY schemas ./schemas
 COPY LICENSE NOTICE THIRD_PARTY_NOTICES.md SOURCE_OFFER.md ./
+# Prepared only from the checksum-locked successful native build. The build
+# context contains no customer geometry or settings and cannot replace itself.
+COPY native/bambu/runtime/ /opt/bambu/
+LABEL org.opencontainers.image.bambustudio.patch="seam-visibility-reuse-v1" \
+      org.opencontainers.image.bambustudio.native-source="df8d6e9a2de238a998d07d0b2a2ff207dea19f85"
+RUN cd /opt/bambu \
+    && sha256sum --check --strict native-runtime.SHA256SUMS \
+    && LD_LIBRARY_PATH=/opt/bambu/native-lib:/opt/bambu/bin ldd bin/bambu-studio > /tmp/bambu-native-ldd.txt \
+    && ! grep -F 'not found' /tmp/bambu-native-ldd.txt \
+    && rm /tmp/bambu-native-ldd.txt
 ENV NODE_ENV=production LD_LIBRARY_PATH=/opt/prusa/lib \
     PRUSA_SLICER_CMD=/opt/prusa/bin/prusa-slicer \
     BAMBU_STUDIO_CMD=/opt/bambu/AppRun \
