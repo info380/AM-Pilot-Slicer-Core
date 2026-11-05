@@ -18,11 +18,15 @@ struct Matrix {
     bool operator==(const Matrix &other) const { return values == other.values; }
 };
 struct Transform { Matrix value; const Matrix &matrix() const { return value; } };
+struct Volume { Transform transform; const Transform &get_matrix() const { return transform; } };
+struct Model { Volume first, modifier; std::vector<Volume *> volumes{&first, &modifier}; };
 struct Object {
     const Object *shared = nullptr;
     Transform centered;
+    Model model;
     const Object *get_shared_object() const { return shared; }
     Transform trafo_centered() const { return centered; }
+    const Model *model_object() const { return &model; }
 };
 struct Samples {
     static int alive;
@@ -55,6 +59,26 @@ int main()
     source.centered.value.values[0] = std::numeric_limits<double>::infinity();
     assert(seam_visibility_reuse_source(&linked) == &linked);
     source.centered.value.values[0] = 0;
+
+    // Even a difference below the native approximate transformation equality
+    // must reject reuse. Exercise both model and modifier volume matrices.
+    for (size_t volume = 0; volume < linked.model.volumes.size(); ++volume) {
+        for (int component = 0; component < 16; ++component) {
+            linked.model.volumes[volume]->transform.value.values[component] = 1e-15;
+            assert(seam_visibility_reuse_source(&linked) == &linked);
+            linked.model.volumes[volume]->transform.value.values[component] = 0;
+        }
+        linked.model.volumes[volume]->transform.value.values[0] = std::numeric_limits<double>::quiet_NaN();
+        assert(seam_visibility_reuse_source(&linked) == &linked);
+        linked.model.volumes[volume]->transform.value.values[0] = 0;
+        source.model.volumes[volume]->transform.value.values[0] = std::numeric_limits<double>::infinity();
+        assert(seam_visibility_reuse_source(&linked) == &linked);
+        source.model.volumes[volume]->transform.value.values[0] = 0;
+    }
+    linked.model.volumes.pop_back();
+    assert(seam_visibility_reuse_source(&linked) == &linked);
+    linked.model.volumes.push_back(&linked.model.modifier);
+    assert(seam_visibility_reuse_source(&linked) == &source);
 
     int computations = 0;
     auto build = [&] { assert(Samples::alive == 0); ++computations; return std::make_unique<Samples>(); };

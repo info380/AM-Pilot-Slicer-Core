@@ -5,7 +5,9 @@ the worker, printer settings, source geometry, modifiers and seam choices intact
 
 The patch reuses immutable occlusion and identical painted seam-region data only
 when Bambu has already established a native shared-object relation and the
-centered transforms are finite and exactly equal. Candidate collection,
+centered transforms and every volume matrix are finite and exactly equal.
+Bambu's volume-transform equality is approximate, so it is explicitly narrowed
+before cache eligibility. Candidate collection,
 visibility assignment, overhang checks, alignment and final seam selection still
 run for every object. One cache entry lives inside one `SeamPlacer::init` call;
 replacement, exceptions and cancellation release it. It does not persist between
@@ -25,6 +27,10 @@ revision. Both archive checksums and producer revision are verified. The vendor
 wx-config contains an absolute prefix; the explicit prefix in the plan preserves
 that vendor requirement. There is no alternative dependency or compiler path on
 failure. No recurring build or automatic native build is introduced.
+The manual compiler job uses the public runner's four CPUs and verifies its
+memory allocation. This compiler allocation is separate from the unchanged
+one-CPU production worker. A failed build's sealed diagnostic artifact remains
+marked failed; it cannot count as native qualification.
 
 The build artifact includes source/patch identities, compiler and package
 versions, CMake configuration, runtime dependencies and both binary checksums.
@@ -40,12 +46,13 @@ only on total filament/time or executable-command hashes. Production activation
 would require the normal reviewed native-runtime, source-offer, signature, scan,
 capability and deployment qualification process.
 
-`qualify-prototype.mjs` runs twelve public synthetic cases against the official
+`qualify-prototype.mjs` runs fourteen public synthetic cases against the official
 binary, the matched unmodified control and the candidate. Its preflight mode
 only verifies that the unchanged binary exercises the intended fixtures; it
 does not mark equivalence as passed. Fixtures include all seam modes, changed
 transforms/settings/regions, independent objects, seam enforcers/blockers and
-negative volumes. Painted facets must alter seams, and every positive modifier
+negative volumes. Two cases retain native layer sharing for approximately equal
+volume transforms while rejecting exact visibility reuse. Painted facets must alter seams, and every positive modifier
 must produce native ironing. These fixtures explicitly disable floating-shell
 variation; no saved customer recipe is edited.
 

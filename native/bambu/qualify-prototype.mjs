@@ -36,6 +36,14 @@ const paint = (plate, attribute, value) => editMesh(plate, xml => xml.replace(/<
   const selected = value === '8' ? [12, 13, 14, 15] : [8, 9];
   return mesh.replace(/(<triangle v1="\d+" v2="\d+" v3="\d+")\/>/g, (match, head) => selected.includes(triangle++) ? `${head} ${attribute}="${value}"/>` : match);
 }));
+const tinyVolumeShift = volume => plate => editMesh(plate, xml => {
+  let object = 0;
+  return xml.replace(/<components>[\s\S]*?<\/components>/g, components => {
+    if (object++ !== 1) return components;
+    let part = 0;
+    return components.replace(/<component objectid="(\d+)"\/>/g, (match, id) => part++ === volume ? `<component objectid="${id}" transform="1 0 0 0 1 0 0 0 1 0.0000000000001 0 0"/>` : match);
+  });
+});
 
 const cases = [
   { id: 'aligned-ten-ironing', count: 10, hits: 9 },
@@ -46,6 +54,8 @@ const cases = [
   { id: 'different-modifier', hits: 0, mutate: s => { s[1].object.modifiers[0].printOverrides.ironing_flowrate = 18; s[2].object.modifiers[0].transform.positionMm.x = -3; } },
   { id: 'different-object-settings', hits: 0, mutate: s => { s[1].object.printOverrides = { perimeters: 3 }; s[2].object.printOverrides = { perimeters: 4 }; } },
   { id: 'independent-identical', hits: 0, mutate: s => s.forEach((entry, i) => { entry.object.definitionId = `independent-${i}`; }) },
+  { id: 'approximately-equal-model-transform', hits: 0, expectedSharedLinks: 2, edit: tinyVolumeShift(0) },
+  { id: 'approximately-equal-modifier-transform', hits: 0, expectedSharedLinks: 2, edit: tinyVolumeShift(1) },
   { id: 'painted-seam-enforcer', hits: 2, edit: plate => paint(plate, 'paint_seam', '4') },
   { id: 'painted-seam-blocker', hits: 2, edit: plate => paint(plate, 'paint_seam', '8') },
   { id: 'distinct-painted-seams', hits: 0, mutate: s => s.forEach((entry, i) => { entry.object.definitionId = `paint-${i}`; }), edit: plate => {
@@ -79,16 +89,17 @@ export async function qualify({ control, candidate, official, resources, output,
     const results = [];
     for (const [label, command] of (preflight ? [['official', official]] : [['official', official], ['control', control], ['candidate', candidate]])) {
       const work = path.join(caseDir, label); await fs.mkdir(work);
-      const logFile = path.join(work, 'native.log'), fd = syncFs.openSync(logFile, 'wx');
+      const logFile = path.join(work, 'native.log'), fd = syncFs.openSync(logFile, 'wx'); let logOpen = true;
       const start = performance.now();
       try {
-        await runProcess({ command, args: ['--debug', '4', '--datadir', path.join(work, 'data'), '--arrange', '0', '--orient', '0', '--skip-useless-pick', '--min-save', '--load-settings', paths.machine + ';' + paths.process, '--load-filaments', paths.filament, '--slice', '0', '--export-3mf', 'output.gcode.3mf', '--outputdir', work, input], cwd: work, timeoutMs: 120000, maximumLogBytes: 262144, cpuAffinityCount: 1, onOutput: (_stream, chunk) => syncFs.writeSync(fd, chunk) });
-      } finally { syncFs.closeSync(fd); }
+        await runProcess({ command, args: ['--debug', '4', '--datadir', path.join(work, 'data'), '--arrange', '0', '--orient', '0', '--skip-useless-pick', '--min-save', '--load-settings', paths.machine + ';' + paths.process, '--load-filaments', paths.filament, '--slice', '0', '--export-3mf', 'output.gcode.3mf', '--outputdir', work, input], cwd: work, timeoutMs: 120000, maximumLogBytes: 262144, cpuAffinityCount: 1, onOutput: (_stream, chunk) => { if (logOpen) syncFs.writeSync(fd, chunk); } });
+      } finally { logOpen = false; syncFs.closeSync(fd); }
       const nativeMs = performance.now() - start, archive = await fs.readFile(path.join(work, 'output.gcode.3mf'));
       const checked = inspectBambuOutput({ bytes: archive, machine, filament, maximumArchiveBytes: 64 * 1024 * 1024, maximumExpandedBytes: 128 * 1024 * 1024, maximumGcodeBytes: 64 * 1024 * 1024 });
       const files = unzipSync(archive, { filter: entry => ['Metadata/project_settings.config', '3D/3dmodel.model', 'Metadata/model_settings.config'].includes(entry.name) });
       const settings = JSON.parse(strFromU8(files['Metadata/project_settings.config']));
       const log = await fs.readFile(logFile, 'utf8'), gcode = strFromU8(checked.gcode);
+      if (spec.expectedSharedLinks !== undefined) assert.equal((log.match(/found shared object from/g) ?? []).length, spec.expectedSharedLinks, spec.id + ': fixture must exercise native approximate equality');
       const result = { label, nativeMs, settings, toolpaths: summarizeToolpaths(gcode), visibilityPasses: (log.match(/raycast visibility of/g) ?? []).length / 2, reuseHits: (log.match(/reused equivalent object visibility/g) ?? []).length, archiveSha256: sha(archive) };
       const ironing = Object.values(result.toolpaths.ironingByObject);
       if (spec.id !== 'shared-negative-volumes') {

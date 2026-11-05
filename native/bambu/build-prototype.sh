@@ -14,6 +14,30 @@ readonly revision="$(value upstreamCommit)"
 readonly vendor_root="$(value vendorBuildPrefix)"
 readonly artifact_id="$(value vendorDependencyArtifactId)"
 readonly jobs="$(value buildJobs)"
+cp "$plan" "$task_root/native/bambu/seam-visibility-reuse.patch" "$output/"
+seal_artifact() {
+  local status=$?
+  trap - EXIT
+  node --input-type=module - "$output" "$status" <<'JS'
+import fs from 'node:fs';import crypto from 'node:crypto';import path from 'node:path';
+const root=process.argv[2],code=Number(process.argv[3]);
+const files=['bin/control','bin/candidate'].filter(p=>fs.existsSync(path.join(root,p)));
+fs.writeFileSync(path.join(root,'build-status.json'),JSON.stringify({schema:'am-pilot-native-prototype-build-status',version:1,status:code===0?'complete':'failed',exitCode:code,sourceRevision:process.env.GITHUB_SHA,runId:process.env.GITHUB_RUN_ID,productionActivation:false,binaries:Object.fromEntries(files.map(p=>[p,crypto.createHash('sha256').update(fs.readFileSync(path.join(root,p))).digest('hex')]))},null,2)+'\n');
+JS
+  # Preserve executable bits and failed-build diagnostics. A partial artifact
+  # remains explicitly failed and cannot count as native qualification.
+  tar --create --gzip --file "$work/native-prototype.tar.gz" --directory "$output" .
+  mv "$work/native-prototype.tar.gz" "$output/"
+  (cd "$output" && sha256sum native-prototype.tar.gz > native-prototype.tar.gz.sha256)
+  exit "$status"
+}
+trap seal_artifact EXIT
+node --input-type=module - "$plan" "$output/build-host.json" <<'JS'
+import fs from 'node:fs';import os from 'node:os';import assert from 'node:assert/strict';
+const p=JSON.parse(fs.readFileSync(process.argv[2])),host={platform:process.platform,arch:process.arch,cpus:os.cpus().length,memoryBytes:os.totalmem()};
+fs.writeFileSync(process.argv[3],JSON.stringify(host,null,2)+'\n');
+assert.equal(host.arch,'x64');assert.equal(host.cpus,p.buildExpectedCpus);assert(host.memoryBytes>=p.buildMinimumMemoryBytes);
+JS
 test ! -e "$vendor_root"
 mkdir -p "$vendor_root"
 
@@ -101,8 +125,3 @@ const files=['bin/control','bin/candidate','seam-visibility-reuse.patch','CMakeC
 fs.writeFileSync(path.join(root,'build-evidence.json'),JSON.stringify({schema:'am-pilot-bambu-native-prototype-build',version:1,sourceRevision:process.env.GITHUB_SHA,repository:process.env.GITHUB_REPOSITORY,runId:process.env.GITHUB_RUN_ID,compiler:child.execFileSync('c++',['--version'],{encoding:'utf8'}).split('\n')[0],files:Object.fromEntries(files.map(p=>[p,hash(path.join(root,p))])),productionActivation:false},null,2)+'\n');
 JS
 (cd "$output" && sha256sum bin/control bin/candidate seam-visibility-reuse.patch build-evidence.json > SHA256SUMS)
-# GitHub artifact downloads do not preserve Unix executable bits; the sealed tar
-# is the transferable diagnostic payload, while loose logs remain inspectable.
-tar --create --gzip --file "$work/native-prototype.tar.gz" --directory "$output" .
-mv "$work/native-prototype.tar.gz" "$output/"
-(cd "$output" && sha256sum native-prototype.tar.gz > native-prototype.tar.gz.sha256)

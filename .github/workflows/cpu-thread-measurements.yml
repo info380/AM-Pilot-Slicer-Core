@@ -68,7 +68,7 @@ jobs:
   seam-visibility-prototype:
     if: github.event_name == 'workflow_dispatch' && inputs.profile == 'seam-prototype'
     runs-on: ubuntu-22.04
-    timeout-minutes: 60
+    timeout-minutes: 120
     permissions:
       contents: read
       actions: read

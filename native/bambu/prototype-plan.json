@@ -12,6 +12,8 @@
   "matchingDependencyTree": "ff281d41e59773ecd48419d60b101529790735fa",
   "vendorBuildPrefix": "/home/runner/work/BambuStudio/BambuStudio",
   "runner": "ubuntu-22.04",
-  "buildJobs": 2,
+  "buildJobs": 4,
+  "buildExpectedCpus": 4,
+  "buildMinimumMemoryBytes": 12884901888,
   "productionActivation": false
 }

@@ -17,14 +17,14 @@ const resultPath = '/tmp/fdm-seam-result-' + payload.diagnosticId + '.json';
 const base = await fs.mkdtemp('/tmp/fdm-seam-benchmark-');
 const controllers = new Set(), nativePaths = new Set(['/opt/bambu/bin/bambu-studio']);
 let fatal = null, sampling = false, watch, deadline;
-const report = { schema: 'am-pilot-one-cpu-seam-prototype', version: 1, startedAt: new Date().toISOString(), diagnosticOnly: true, serverPlanChanged: false, printerCommandsSent: false, runs: [] };
+const report = { schema: 'am-pilot-one-cpu-seam-prototype', version: 1, startedAt: new Date().toISOString(), diagnosticOnly: true, preflight: payload.preflight === true, executionContext: payload.executionContext, serverPlanChanged: false, printerCommandsSent: false, runs: [] };
 
 const children = async () => {
   const rows = [];
   for (const pid of (await fs.readdir('/proc')).filter(value => /^\d+$/.test(value))) {
     try {
       const status = await fs.readFile('/proc/' + pid + '/status', 'utf8'), exe = await fs.readlink('/proc/' + pid + '/exe');
-      rows.push({ pid: Number(pid), ppid: Number(/^PPid:\s+(\d+)/m.exec(status)?.[1]), exe, allowed: /^Cpus_allowed_list:\s+(\S+)/m.exec(status)?.[1], rssKiB: Number(/^VmRSS:\s+(\d+)/m.exec(status)?.[1] ?? 0) });
+      rows.push({ pid: Number(pid), ppid: Number(/^PPid:\s+(\d+)/m.exec(status)?.[1]), exe, allowed: /^Cpus_allowed_list:\s+(\S+)/m.exec(status)?.[1], rssKiB: Number(/^VmRSS:\s+(\d+)/m.exec(status)?.[1] ?? 0), threads: Number(/^Threads:\s+(\d+)/m.exec(status)?.[1] ?? 0) });
     } catch (error) { if (!['ENOENT', 'ESRCH'].includes(error.code)) throw error; }
   }
   const byId = new Map(rows.map(row => [row.pid, row]));
@@ -47,6 +47,9 @@ const monitor = async () => {
     for (const row of rows.filter(row => row.owned)) {
       assert(/^\d+$/.test(row.allowed), 'Native diagnostic exceeded single-CPU affinity');
       report.peakNativeRssKiB = Math.max(report.peakNativeRssKiB ?? 0, row.rssKiB);
+      report.peakNativeThreads = Math.max(report.peakNativeThreads ?? 0, row.threads);
+      report.nativeAllowedCpuLists ??= [];
+      if (!report.nativeAllowedCpuLists.includes(row.allowed)) report.nativeAllowedCpuLists.push(row.allowed);
     }
   } catch (error) { fatal ??= 'Process guard failed: ' + error.message; for (const controller of controllers) controller.abort(); }
   finally { sampling = false; }
@@ -64,6 +67,7 @@ try {
   report.instanceId = process.env.RENDER_INSTANCE_ID ?? null;
   report.serviceId = process.env.RENDER_SERVICE_ID ?? null;
   report.binaryChecksums = {};
+  assert.deepEqual(Object.keys(payload.binaries).sort(), report.preflight ? ['official'] : ['candidate', 'control', 'official']);
   for (const [label, binary] of Object.entries(payload.binaries)) {
     const actual = sha(await fs.readFile(binary.path)); assert.equal(actual, binary.sha256, 'Native binary identity changed: ' + label);
     assert.equal(sha(await fs.readFile(binary.launcher)), binary.launcherSha256, 'Native launcher identity changed: ' + label);
@@ -94,16 +98,16 @@ try {
   report.nativePreparedProjectSha256 = sha(await fs.readFile(nativeInput));
   const summaries = [];
   // Paired order alternates to avoid assigning all warm runs to the candidate.
-  const order = ['official', 'control', 'candidate', 'candidate', 'control', 'control', 'candidate'];
+  const order = report.preflight ? ['official'] : ['official', 'control', 'candidate', 'candidate', 'control', 'control', 'candidate'];
   for (const [index, label] of order.entries()) {
     await monitor(); if (fatal) throw Error(fatal);
     assert.equal(sha(await fs.readFile(nativeInput)), report.nativePreparedProjectSha256, 'Prepared native project changed between runs');
     const work = await fs.mkdtemp(base + '/run-'), controller = new AbortController(); controllers.add(controller);
-    const logPath = path.join(work, 'native.log'), fd = syncFs.openSync(logPath, 'wx', 0o600); let logBytes = 0;
+    const logPath = path.join(work, 'native.log'), fd = syncFs.openSync(logPath, 'wx', 0o600); let logBytes = 0, logOpen = true;
     const beforeCpu = (await fs.readFile('/sys/fs/cgroup/cpu.stat', 'utf8')).trim(); const start = performance.now();
     try {
-      await runProcess({ command: payload.binaries[label].launcher, args: ['--debug', '4', '--datadir', work + '/data', '--arrange', '0', '--orient', '0', '--skip-useless-pick', '--min-save', '--load-settings', paths.machine + ';' + paths.process, '--load-filaments', paths.filament, '--load-custom-gcodes', paths.pauses, '--slice', '0', '--export-3mf', 'output.gcode.3mf', '--outputdir', work, nativeInput], cwd: work, timeoutMs: 60000, maximumLogBytes: config.maximumLogBytes, cpuAffinityCount: 1, signal: controller.signal, onOutput: (_stream, chunk) => { logBytes += Buffer.byteLength(chunk); if (logBytes > 32 * 1024 * 1024) { fatal = 'Native diagnostic log limit exceeded'; controller.abort(); return; } syncFs.writeSync(fd, chunk); } });
-    } finally { syncFs.closeSync(fd); controllers.delete(controller); }
+      await runProcess({ command: payload.binaries[label].launcher, args: ['--debug', '4', '--datadir', work + '/data', '--arrange', '0', '--orient', '0', '--skip-useless-pick', '--min-save', '--load-settings', paths.machine + ';' + paths.process, '--load-filaments', paths.filament, '--load-custom-gcodes', paths.pauses, '--slice', '0', '--export-3mf', 'output.gcode.3mf', '--outputdir', work, nativeInput], cwd: work, timeoutMs: 60000, maximumLogBytes: config.maximumLogBytes, cpuAffinityCount: 1, signal: controller.signal, onOutput: (_stream, chunk) => { if (!logOpen) return; logBytes += Buffer.byteLength(chunk); if (logBytes > 32 * 1024 * 1024) { fatal = 'Native diagnostic log limit exceeded'; controller.abort(); return; } syncFs.writeSync(fd, chunk); } });
+    } finally { logOpen = false; syncFs.closeSync(fd); controllers.delete(controller); }
     const nativeMs = performance.now() - start, afterCpu = (await fs.readFile('/sys/fs/cgroup/cpu.stat', 'utf8')).trim();
     if (fatal) throw Error(fatal);
     const archive = await fs.readFile(work + '/output.gcode.3mf');
@@ -142,7 +146,7 @@ try {
     const row = { index, label, nativeMs, beforeCpu, afterCpu, nativeSettingsMatch: true, nativeSettingsCount: 575, layerCount: 90, ironingByObject: summary.ironingByObject, archiveSha256: sha(archive), gcodeSha256: sha(checked.gcode), nativeObjectCount: 10, objectsNeedingSlice: 1, visibilityPasses: passes, reuseHits: hits, comparisonToOfficial: comparison, outerWallStarts: summary.outerWallStarts, nativeStageMs: { geometryToExport: at('Exporting G-code...') - at('Starting the slicing process.'), gcodeExport: at('Exporting G-code finished') - at('Exporting G-code...'), seamInitialization: stamp(seamEnd.at) - stamp(seamStart.at), visibilityRaycasts: rays.reduce((sum, event, i) => i % 2 ? sum + stamp(event.at) - stamp(rays[i - 1].at) : sum, 0) } };
     report.runs.push(row); console.log('FDM_SEAM_RUN ' + JSON.stringify({ label, index, nativeMs, visibilityPasses: passes, reuseHits: hits, nativeStageMs: row.nativeStageMs }));
   }
-  report.status = 'passed';
+  report.status = report.preflight ? 'fixture-preflight-passed' : 'passed';
 } catch (error) { report.status = 'failed'; report.error = fatal ?? error.message; process.exitCode = 1; }
 finally {
   clearInterval(watch); clearTimeout(deadline); while (sampling) await new Promise(resolve => setTimeout(resolve, 10));
