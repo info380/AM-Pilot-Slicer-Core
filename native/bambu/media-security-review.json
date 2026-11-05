@@ -1,0 +1,219 @@
+{
+  "schema": "am-pilot-headless-ffmpeg-source-exclusions",
+  "version": 1,
+  "reviewedOn": "2026-11-05",
+  "upstreamVersion": "7.0.2",
+  "sourceSha256": "5eb46d18d664a0ccadf7b0adee03bd3b7fa72893d667f36c69e202a807e6d533",
+  "scope": "Only the three reduced libraries; no parser, codec, bitstream filter, media format/filter/device, network or program is enabled. These are source/build exclusions, not severity waivers or formal production promotion.",
+  "advisories": [
+    {
+      "id": "CVE-2023-51791",
+      "reason": "disabled-parser",
+      "upstreamPath": "libavcodec/jpegxl_parser.c",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2023-51791"
+    },
+    {
+      "id": "CVE-2023-51793",
+      "reason": "unshipped-filter",
+      "upstreamPath": "libavfilter/vf_weave.c",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2023-51793",
+      "upstreamFix": "https://github.com/FFmpeg/FFmpeg/commit/0ecc1f0e48930723d7a467761b66850811c23e62"
+    },
+    {
+      "id": "CVE-2023-51794",
+      "reason": "unshipped-filter",
+      "upstreamPath": "libavfilter/af_stereowiden.c",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2023-51794"
+    },
+    {
+      "id": "CVE-2023-51795",
+      "reason": "unshipped-filter",
+      "upstreamPath": "libavfilter/avf_showspectrum.c",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2023-51795"
+    },
+    {
+      "id": "CVE-2023-51798",
+      "reason": "unshipped-filter",
+      "upstreamPath": "libavfilter/vf_minterpolate.c",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2023-51798"
+    },
+    {
+      "id": "CVE-2025-1594",
+      "reason": "disabled-codec",
+      "upstreamPath": "libavcodec/aacenc_tns.c",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2025-1594"
+    },
+    {
+      "id": "CVE-2025-25469",
+      "reason": "unshipped-format",
+      "upstreamPath": "libavformat/iamf_parse.c",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2025-25469",
+      "upstreamFix": "https://github.com/FFmpeg/FFmpeg/commit/d5873be583ada9e1fb887e2fe8dcfd4b12e0efcd"
+    },
+    {
+      "id": "CVE-2026-107695",
+      "reason": "unshipped-format",
+      "upstreamPath": "libavformat/hls.c",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2026-107695"
+    },
+    {
+      "id": "CVE-2026-107696",
+      "reason": "unshipped-format",
+      "upstreamPath": "libavformat/rtsp.c",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2026-107696"
+    },
+    {
+      "id": "CVE-2026-30754",
+      "reason": "unshipped-format",
+      "upstreamPath": "libavformat/rtpenc_h264_hevc.c",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2026-30754"
+    },
+    {
+      "id": "CVE-2026-30997",
+      "reason": "disabled-codec",
+      "upstreamPath": "libavcodec/av1dec.c",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2026-30997"
+    },
+    {
+      "id": "CVE-2026-30998",
+      "reason": "unshipped-tools",
+      "upstreamPath": "tools/zmqsend.c",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2026-30998"
+    },
+    {
+      "id": "CVE-2026-30999",
+      "reason": "unshipped-tools",
+      "upstreamPath": "tools/zmqsend.c",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2026-30999",
+      "upstreamFix": "https://github.com/FFmpeg/FFmpeg/commit/144af8f81abc1385631b4e1f4672cd415a9c6e05"
+    },
+    {
+      "id": "CVE-2026-40962",
+      "reason": "unshipped-format",
+      "upstreamPath": "libavformat/mov.c",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2026-40962"
+    },
+    {
+      "id": "CVE-2026-52296",
+      "reason": "disabled-codec",
+      "upstreamPath": "libavcodec/wmaenc.c",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2026-52296"
+    },
+    {
+      "id": "CVE-2026-52297",
+      "reason": "unshipped-format",
+      "upstreamPath": "libavformat/mov.c",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2026-52297"
+    },
+    {
+      "id": "CVE-2026-64830",
+      "reason": "unshipped-format",
+      "upstreamPath": "libavformat/mpeg.c",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2026-64830"
+    },
+    {
+      "id": "CVE-2026-64832",
+      "reason": "disabled-codec",
+      "upstreamPath": "libavcodec/nvdec.c",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2026-64832"
+    },
+    {
+      "id": "CVE-2026-64833",
+      "reason": "unshipped-format",
+      "upstreamPath": "libavformat/spdifenc.c",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2026-64833"
+    },
+    {
+      "id": "CVE-2026-64834",
+      "reason": "unshipped-format",
+      "upstreamPath": "libavformat/rtpdec_asf.c",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2026-64834"
+    },
+    {
+      "id": "CVE-2026-64835",
+      "reason": "disabled-codec",
+      "upstreamPath": "libavcodec/adxdec.c",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2026-64835"
+    },
+    {
+      "id": "CVE-2026-65703",
+      "reason": "disabled-codec",
+      "upstreamPath": "libavcodec/tdsc.c",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2026-65703"
+    },
+    {
+      "id": "CVE-2026-65704",
+      "reason": "unshipped-format",
+      "upstreamPath": "libavformat/ty.c",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2026-65704"
+    },
+    {
+      "id": "CVE-2026-65705",
+      "reason": "unshipped-filter",
+      "upstreamPath": "libavfilter/vf_floodfill.c",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2026-65705"
+    },
+    {
+      "id": "CVE-2026-65706",
+      "reason": "unshipped-filter",
+      "upstreamPath": "libavfilter/vf_swaprect.c",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2026-65706"
+    },
+    {
+      "id": "CVE-2026-66036",
+      "reason": "unshipped-filter",
+      "upstreamPath": "libavfilter/vf_hqdn3d.c",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2026-66036"
+    },
+    {
+      "id": "CVE-2026-66037",
+      "reason": "unshipped-format",
+      "upstreamPath": "libavformat/iamf_parse.c",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2026-66037"
+    },
+    {
+      "id": "CVE-2026-66038",
+      "reason": "disabled-codec",
+      "upstreamPath": "libavcodec/lcldec.c",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2026-66038"
+    },
+    {
+      "id": "CVE-2026-66039",
+      "reason": "disabled-codec",
+      "upstreamPath": "libavcodec/mace.c",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2026-66039"
+    },
+    {
+      "id": "CVE-2026-66040",
+      "reason": "disabled-codec",
+      "upstreamPath": "libavcodec/pngenc.c",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2026-66040"
+    },
+    {
+      "id": "CVE-2026-66041",
+      "reason": "unshipped-filter",
+      "upstreamPath": "libavfilter/vf_quirc.c",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2026-66041"
+    },
+    {
+      "id": "CVE-2026-70628",
+      "reason": "disabled-parser",
+      "upstreamPath": "libavcodec/dvbsub_parser.c",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2026-70628"
+    },
+    {
+      "id": "CVE-2026-70632",
+      "reason": "disabled-codec",
+      "upstreamPath": "libavcodec/cfhd.c",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2026-70632"
+    },
+    {
+      "id": "CVE-2026-96611",
+      "reason": "unshipped-format",
+      "upstreamPath": "libavformat/mov.c",
+      "reference": "https://nvd.nist.gov/vuln/detail/CVE-2026-96611"
+    }
+  ],
+  "maximumFeedAgeSeconds": 86400,
+  "maximumFutureSkewSeconds": 300
+}

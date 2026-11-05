@@ -11,6 +11,7 @@ permissions:
   packages: write
   security-events: write
   attestations: write
+  actions: read
 
 jobs:
   release:
@@ -32,6 +33,20 @@ jobs:
         id: image
         shell: bash
         run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}-bambu" >> "$GITHUB_OUTPUT"
+      - name: Verify and materialize the measured native runtime
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash native/bambu/fetch-runtime.sh "$RUNNER_TEMP/bambu-runtime-download" native/bambu/runtime
+      - name: Review reduced native media dependencies against current advisories
+        run: |
+          mkdir -p release-evidence
+          cpe_name="$(node -p "'cpe:2.3:a:ffmpeg:ffmpeg:'+require('./native/bambu/media-build-plan.json').versionName+':*:*:*:*:*:*:*'")"
+          curl --fail --silent --show-error --get --retry 3 --retry-delay 10 \
+            --proto '=https' --tlsv1.2 --max-time 45 --max-filesize 16777216 \
+            --data-urlencode "cpeName=$cpe_name" \
+            --data 'isVulnerable' 'https://services.nvd.nist.gov/rest/json/cves/2.0' \
+            --output release-evidence/native-media-advisories.json
+          node native/bambu/review-media-security.mjs native/bambu/runtime release-evidence/native-media-advisories.json release-evidence/native-media-security-review.json
       - name: Authenticate to GHCR
         uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
         with:
@@ -104,7 +119,17 @@ jobs:
       - name: Build corresponding-source archive
         env:
           RELEASE_DIGEST: ${{ steps.build.outputs.digest }}
+          BAMBU_NATIVE_ARCHIVE_PATH: ${{ runner.temp }}/bambu-runtime-download/verified-native.tar.gz
+          BAMBU_MEDIA_ARCHIVE_PATH: ${{ runner.temp }}/bambu-runtime-download/verified-media.tar.gz
         run: scripts/build-bambu-source-bundle.sh
+      - name: Qualify packaged seam reuse against both unchanged controls
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          bash native/bambu/qualify-image.sh "${IMAGE}@${DIGEST}" "$RUNNER_TEMP/bambu-native-qualification" "$RUNNER_TEMP/bambu-runtime-download/verified-native.tar.gz"
+          cp "$RUNNER_TEMP/bambu-native-qualification/cases/report.json" release-evidence/native-seam-qualification.json
+          cp "$RUNNER_TEMP/bambu-native-qualification/resources.json" release-evidence/native-seam-resources.json
       - name: Materialize immutable release evidence
         env:
           IMAGE: ${{ steps.image.outputs.name }}
@@ -147,6 +172,16 @@ jobs:
           cp NOTICE THIRD_PARTY_NOTICES.md SOURCE_OFFER.md trivy-results.sarif release-evidence/
           sha256sum \
             release-evidence/NOTICE \
+            release-evidence/native-build-status.json \
+            release-evidence/native-build-evidence.json \
+            release-evidence/native-runtime-plan.json \
+            release-evidence/native-runtime.SHA256SUMS \
+            release-evidence/native-media-build-evidence.json \
+            release-evidence/native-media-advisories.json \
+            release-evidence/native-media-security-review.json \
+            release-evidence/native-media.spdx.json \
+            release-evidence/native-seam-qualification.json \
+            release-evidence/native-seam-resources.json \
             release-evidence/THIRD_PARTY_NOTICES.md \
             release-evidence/SOURCE_OFFER.md \
             release-evidence/bambu-studio-binary.SHA256 \
