@@ -2,7 +2,7 @@
   "schema": "am-pilot-native-seam-prototype-evidence",
   "version": 1,
   "measuredAt": "2026-11-05T11:43:13.442854+00:00",
-  "status": "offline-qualified-cloud-benchmark-pending",
+  "status": "synthetic-native-qualified-diagnostic-only",
   "productionActivation": false,
   "privateCustomerDataIncluded": false,
   "compiler": {
@@ -424,18 +424,6 @@
     "cppLifetimeEligibilitySanitizers": [
       "ASan",
       "UBSan"
-    ],
-    "realPlateComparisonPolicy": {
-      "privateEvidenceRetained": true,
-      "strictSeamsModifiersOtherDepositedFeatures": true,
-      "existingNativeFloatingShellVariation": true,
-      "earlierRejectedRepeatsRetained": true,
-      "limitsDerivedFromUnmodifiedSameRecipeControlsOnly": true,
-      "physicalPrintVerified": false
-    }
-  },
-  "cloudWorkerMeasurement": {
-    "status": "pending",
-    "reason": "Native Safari activity guard prevented opening the Render shell; no worker mutation or deployment occurred"
+    ]
   }
 }
