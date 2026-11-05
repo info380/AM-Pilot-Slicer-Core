@@ -1,0 +1,19 @@
+{
+  "schema": "am-pilot-bambu-seam-visibility-prototype",
+  "version": 1,
+  "upstreamCommit": "926a7192574bcb9b3a732e1ec59a46d79cb45466",
+  "upstreamSourceSha256": "3c0d92559057709a2e500824acb1cfc4b93e0ef0a218c2e404e2ce466b0c7d4b",
+  "vendorDependencyArtifactId": 9218886647,
+  "vendorDependencyArtifactSha256": "623db96898e944ae744f0c8af1eaf45d23b95722cafd94995db7c3734818113d",
+  "vendorDependencyArchiveSha256": "d686129cb09045f5837276f31e8a555c13e11b41e2055715cef1af9c87c29938",
+  "vendorDependencyRunId": 31797880268,
+  "vendorDependencyRevision": "9a530f77c23d8c3430d1dbef02e103cd8bd6480e",
+  "vendorRepositoryId": 511797274,
+  "matchingDependencyTree": "ff281d41e59773ecd48419d60b101529790735fa",
+  "vendorBuildPrefix": "/home/runner/work/BambuStudio/BambuStudio",
+  "runner": "ubuntu-22.04",
+  "buildJobs": 4,
+  "buildExpectedCpus": 4,
+  "buildMinimumMemoryBytes": 12884901888,
+  "productionActivation": false
+}

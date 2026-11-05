@@ -8,7 +8,7 @@ on:
         required: true
         default: full
         type: choice
-        options: [full, smoke]
+        options: [full, smoke, seam-prototype]
       engine:
         description: Engine for this independent comparison
         required: true
@@ -28,7 +28,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   measure:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && inputs.profile != 'seam-prototype'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -62,5 +62,40 @@ jobs:
           path: |
             ${{ runner.temp }}/cpu-scaling-evidence/report.json
             /tmp/cpu-scaling-signature.json
+          if-no-files-found: error
+          retention-days: 7
+
+  seam-visibility-prototype:
+    if: github.event_name == 'workflow_dispatch' && inputs.profile == 'seam-prototype'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.20.0
+      - name: Install official native build prerequisites
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends build-essential ninja-build cmake pkg-config git gettext autoconf libgtk-3-dev libwebkit2gtk-4.1-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libglu1-mesa-dev libosmesa6-dev libglew-dev libdbus-1-dev libsecret-1-dev libudev-dev libunwind-dev libssl-dev libcurl4-openssl-dev libmspack-dev libbz2-dev libfontconfig1-dev libpango1.0-dev
+      - name: Build matched native control and seam-visibility candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash native/bambu/build-prototype.sh "$RUNNER_TEMP/bambu-native-work" "$RUNNER_TEMP/bambu-native-output"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: bambu-seam-prototype-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/bambu-native-output/*.log
+            ${{ runner.temp }}/bambu-native-output/*.txt
+            ${{ runner.temp }}/bambu-native-output/*.json
+            ${{ runner.temp }}/bambu-native-output/*.patch
+            ${{ runner.temp }}/bambu-native-output/native-prototype.tar.gz*
           if-no-files-found: error
           retention-days: 7

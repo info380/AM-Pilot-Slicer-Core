@@ -1,0 +1,142 @@
+--- a/src/libslic3r/GCode/SeamPlacer.cpp
++++ b/src/libslic3r/GCode/SeamPlacer.cpp
+@@ -1,4 +1,5 @@
+ #include "SeamPlacer.hpp"
++#include "SeamVisibilityReuse.hpp"
+ 
+ #include "tbb/parallel_for.h"
+ #include "tbb/blocked_range.h"
+@@ -1396,6 +1397,9 @@
+ {
+     using namespace SeamPlacerImpl;
+     m_seam_per_object.clear();
++    // This one-entry cache belongs to this init call only. Objects retain their
++    // own seam candidates, alignment and final seam decisions.
++    SeamVisibilityReuseCache<const PrintObject *, GlobalModelInfo> visibility_cache;
+ 
+     for (const PrintObject *po : print.objects()) {
+         throw_if_canceled_func();
+@@ -1403,18 +1407,38 @@
+         SeamComparator comparator{configured_seam_preference};
+ 
+         {
+-            GlobalModelInfo global_model_info{};
+-            gather_enforcers_blockers(global_model_info, po);
+-            throw_if_canceled_func();
+-            if (configured_seam_preference == spAligned || configured_seam_preference == spNearest) { compute_global_occlusion(global_model_info, po, throw_if_canceled_func); }
++            std::unique_ptr<GlobalModelInfo> uncached_info;
++            const GlobalModelInfo *global_model_info = nullptr;
++            if (configured_seam_preference == spAligned || configured_seam_preference == spNearest) {
++                // Bambu's shared-object relation already checks mesh identity,
++                // volume transforms/types/config, all facet painting and object
++                // settings. Reuse additionally requires exact visibility transforms.
++                const PrintObject *source = seam_visibility_reuse_source(po);
++                const bool reused = visibility_cache.matches(source);
++                global_model_info = &visibility_cache.get_or_create(source, [&] {
++                    auto info = std::make_unique<GlobalModelInfo>();
++                    gather_enforcers_blockers(*info, po);
++                    throw_if_canceled_func();
++                    compute_global_occlusion(*info, po, throw_if_canceled_func);
++                    throw_if_canceled_func();
++                    return info;
++                });
++                if (reused)
++                    BOOST_LOG_TRIVIAL(debug) << "SeamPlacer: reused equivalent object visibility";
++            } else {
++                visibility_cache.clear();
++                uncached_info = std::make_unique<GlobalModelInfo>();
++                gather_enforcers_blockers(*uncached_info, po);
++                global_model_info = uncached_info.get();
++            }
+             throw_if_canceled_func();
+             BOOST_LOG_TRIVIAL(debug) << "SeamPlacer: gather_seam_candidates: start";
+-            gather_seam_candidates(po, global_model_info, configured_seam_preference);
++            gather_seam_candidates(po, *global_model_info, configured_seam_preference);
+             BOOST_LOG_TRIVIAL(debug) << "SeamPlacer: gather_seam_candidates: end";
+             throw_if_canceled_func();
+             if (configured_seam_preference == spAligned || configured_seam_preference == spNearest) {
+                 BOOST_LOG_TRIVIAL(debug) << "SeamPlacer: calculate_candidates_visibility : start";
+-                calculate_candidates_visibility(po, global_model_info);
++                calculate_candidates_visibility(po, *global_model_info);
+                 BOOST_LOG_TRIVIAL(debug) << "SeamPlacer: calculate_candidates_visibility : end";
+             }
+         } // destruction of global_model_info (large structure, no longer needed)
+--- /dev/null
++++ b/src/libslic3r/GCode/SeamVisibilityReuse.hpp
+@@ -0,0 +1,76 @@
++#ifndef libslic3r_SeamVisibilityReuse_hpp_
++#define libslic3r_SeamVisibilityReuse_hpp_
++
++#include <cstddef>
++#include <memory>
++#include <optional>
++#include <stdexcept>
++#include <utility>
++
++namespace Slic3r { namespace SeamPlacerImpl {
++
++// The native shared-object relation is required; geometrically similar but
++// independently imported objects never become equivalent through this helper.
++// Center offsets are checked separately because occlusion uses trafo_centered().
++// Native volume transformation equality is approximate; visibility reuse also
++// requires exact finite volume matrices before reusing any sampled geometry.
++template<class Object> const Object *seam_visibility_reuse_source(const Object *object)
++{
++    const Object *source = object->get_shared_object();
++    if (source != nullptr) {
++        const auto current = object->trafo_centered().matrix();
++        const auto reference = source->trafo_centered().matrix();
++        if (!current.allFinite() || !reference.allFinite() || !(current == reference))
++            return object;
++        const auto &volumes = object->model_object()->volumes;
++        const auto &source_volumes = source->model_object()->volumes;
++        if (volumes.size() != source_volumes.size())
++            return object;
++        for (std::size_t index = 0; index < volumes.size(); ++index) {
++            const auto volume = volumes[index]->get_matrix().matrix();
++            const auto source_volume = source_volumes[index]->get_matrix().matrix();
++            if (!volume.allFinite() || !source_volume.allFinite() || !(volume == source_volume))
++                return object;
++        }
++        return source;
++    }
++    return object;
++}
++
++// One stable heap allocation at most. Data may contain self-referential tree
++// functors, so neither Data nor its sample vectors are copied or moved. The cache
++// is local to SeamPlacer::init and cannot retain geometry between slices.
++template<class Key, class Data> class SeamVisibilityReuseCache
++{
++public:
++    bool matches(const Key &key) const { return m_data && m_key && *m_key == key; }
++
++    void clear()
++    {
++        m_data.reset();
++        m_key.reset();
++    }
++
++    template<class Factory> const Data &get_or_create(const Key &key, Factory &&factory)
++    {
++        if (!matches(key)) {
++            clear();
++            // Publish only a complete result; cancellation or a failed factory
++            // leaves the cache empty and propagates to the existing caller.
++            auto data = std::forward<Factory>(factory)();
++            if (!data)
++                throw std::logic_error("Seam visibility factory returned no result");
++            m_key = key;
++            m_data = std::move(data);
++        }
++        return *m_data;
++    }
++
++private:
++    std::optional<Key> m_key;
++    std::unique_ptr<Data> m_data;
++};
++
++}} // namespace Slic3r::SeamPlacerImpl
++
++#endif
