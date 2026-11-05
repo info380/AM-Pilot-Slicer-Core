@@ -23,6 +23,10 @@ RUN test "$(dpkg-query -W -f='${Version}' libbrotli1)" = '1.1.0-2ubuntu0.1' \
     && test "$(dpkg-query -W -f='${Version}' libpcre2-8-0)" = '10.42-4ubuntu2.2' \
     && test "$(dpkg-query -W -f='${Version}' libsoup-3.0-0)" = '3.4.4-5ubuntu0.10' \
     && test "$(dpkg-query -W -f='${Version}' libsoup-3.0-common)" = '3.4.4-5ubuntu0.10'
+# Runtime updates use a new immutable image. No package manager is required by
+# native slicing, normalization or the worker protocol. Keep dependency checks
+# enabled rather than forcing removal of a library still needed by the runtime.
+RUN dpkg --purge apt libapt-pkg6.0t64
 WORKDIR /worker
 COPY --from=dependencies /worker/node_modules ./node_modules
 COPY package.json package-lock.json ./

@@ -17,6 +17,7 @@ evidence.source.brotliPackageVersion='1.1.0-2ubuntu0.1';
 evidence.source.zlibPackageVersion='1:1.3.dfsg-3.1ubuntu2.3';
 evidence.source.pcre2PackageVersion='10.42-4ubuntu2.2';
 evidence.source.libsoup3PackageVersion='3.4.4-5ubuntu0.10';
+evidence.source.runtimeRemovedPackages=['apt','libapt-pkg6.0t64'];
 const nativePlan=JSON.parse(fs.readFileSync(new URL('../native/bambu/runtime-plan.json',import.meta.url),'utf8'));
 evidence.source.nativeBuild={revision:nativePlan.nativeSourceRevision,workflowRun:`https://github.com/${nativePlan.repository}/actions/runs/${nativePlan.buildRunId}`,artifactId:nativePlan.artifactId,artifactZipChecksumSha256:nativePlan.artifactZipSha256,artifactTarChecksumSha256:nativePlan.artifactTarSha256,binaryChecksumSha256:nativePlan.binarySha256,patchChecksumSha256:nativePlan.patchSha256,libraries:nativePlan.libraries};
 const releaseBase=`${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/releases/download/${encodeURIComponent(process.env.GITHUB_REF_NAME)}`;
