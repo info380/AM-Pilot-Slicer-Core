@@ -126,6 +126,8 @@ assert.match(sharedRuntime, /ARG VERIFIED_RUNTIME_IMAGE=ghcr\.io\/info380\/am-pi
 assert.match(sharedRuntime, /FROM \$\{VERIFIED_RUNTIME_IMAGE\} AS runtime/);
 assert.match(sharedRuntime, /RUN rm -rf \.\/src \.\/schemas \.\/node_modules/);
 assert.doesNotMatch(sharedRuntime, /apt-get|curl --/);
+assert.match(sharedRuntime, /dpkg --purge apt libapt-pkg6\.0t64/);
+assert.doesNotMatch(sharedRuntime, /--force-depends|--allow-remove-essential/);
 const sharedEvidence = fs.readFileSync(new URL('./write-bambu-release-evidence.js', import.meta.url), 'utf8');
 assert.match(sharedEvidence, /ubuntuSnapshot='20261104T000000Z'/);
 assert.match(sharedRuntime, /libpcre2-8-0\)" = '10\.42-4ubuntu2\.2'/);
@@ -144,6 +146,8 @@ assert.match(bambuRelease,/8b4376d5d6befe5c24d503f10ff136d9e0c49f9127a4279fd110b
 assert.match(bambuRelease,/sha256sum --check --strict/);
 assert.match(bambuRelease,/severity: CRITICAL,HIGH/);
 assert.match(bambuRelease,/exit-code: '1'/);
+assert.match(bambuRelease,/flavor: latest=false/);
+assert(bambuRelease.indexOf('Publish qualified rolling alias') > bambuRelease.indexOf('Publish permanent corresponding source and release evidence'));
 
 assert.match(sharedRuntime, /libbrotli1\)" = '1\.1\.0-2ubuntu0\.1'/);
 assert.match(sharedEvidence, /runtimeBaseImage='ghcr\.io\/info380\/am-pilot-slicer-core-bambu@sha256:3545ba6ac6accb118628c3e83e82d25400e525d80dda9e1de35fe8e353840385'/);

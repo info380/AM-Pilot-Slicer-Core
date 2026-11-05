@@ -61,6 +61,7 @@ test('Bambu release evidence binds the modified native binary, source and perman
     assert.equal(evidence.capabilityRevisionId, BAMBU_CAPABILITY_REVISION);
     assert.equal(evidence.source.nativeBuild.binaryChecksumSha256, plan.binarySha256);
     assert.equal(evidence.source.nativeBuild.patchChecksumSha256, plan.patchSha256);
+    assert.deepEqual(evidence.source.runtimeRemovedPackages, ['apt', 'libapt-pkg6.0t64']);
     assert.deepEqual(evidence.source.nativeBuild.libraries, plan.libraries);
     assert(evidence.artifacts.nativeBuildArchive.endsWith('/Bambu-native-build-' + plan.nativeSourceRevision + '.tar.gz'));
     assert(evidence.artifacts.nativeBuilderSource.endsWith('/AM-Pilot-Native-Build-' + plan.nativeSourceRevision + '.tar.gz'));
