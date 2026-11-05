@@ -39,3 +39,34 @@ shell variation. Verify placement, seams and feature geometry rather than relyin
 only on total filament/time or executable-command hashes. Production activation
 would require the normal reviewed native-runtime, source-offer, signature, scan,
 capability and deployment qualification process.
+
+`qualify-prototype.mjs` runs twelve public synthetic cases against the official
+binary, the matched unmodified control and the candidate. Its preflight mode
+only verifies that the unchanged binary exercises the intended fixtures; it
+does not mark equivalence as passed. Fixtures include all seam modes, changed
+transforms/settings/regions, independent objects, seam enforcers/blockers and
+negative volumes. Painted facets must alter seams, and every positive modifier
+must produce native ironing. These fixtures explicitly disable floating-shell
+variation; no saved customer recipe is edited.
+
+`toolpath-comparison.mjs` compares exact deposited line segments, directed native
+arc parameters and per-contour outer-wall starts. It follows coordinate/extrusion
+modes and resets, and rejects unsupported arc planes/center modes. Reordering is
+separated from geometry and seam changes. Layer heights and extrusion amounts
+remain part of the comparison.
+
+`benchmark-worker.mjs` accepts a private input packet in the existing worker.
+It verifies the packet's runtime-source/binary identities, one-CPU/two-GB limits,
+nice priority and single-CPU native affinity. It aborts when other Bambu/Prusa
+native work appears, limits each invocation to one minute and the diagnostic to
+six minutes, and cleans its temporary slice files. One official run and three
+alternating control/candidate pairs use the unchanged prepared plate and all
+575 native settings. It checks embedded MD5, the authoritative pause/custom-code
+verifiers, 90 layers, each part's ironing, seam starts and deposited features.
+The only permitted feature variation is the previously documented native
+floating-shell branch. Continuous-segment distance bounds, extrusion and length
+deltas must stay within explicit limits from the retained reference study; the
+input packet supplies those limits and its evidence reference. This is recorded
+explicitly rather than treated as byte identity or physical qualification.
+Do not upload its private input packet or
+customer archives to this repository or its workflows.
