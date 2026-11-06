@@ -15,7 +15,7 @@ const PRUSA = [
 ];
 const BAMBU = [
   [0,'Undefined'],[1,'Inner wall'],[2,'Outer wall'],
-  [3,'Overhang wall'],[4,'Sparse infill'],[5,'Internal solid infill'],
+  [3,'Overhang wall'],[4,'Sparse infill'],[5,'Internal solid infill'],[16,'Floating vertical shell'],
   [6,'Top surface'],[18,'Bottom surface'],[14,'Ironing'],
   [7,'Bridge'],[11,'Gap infill'],[10,'Skirt'],[19,'Brim'],
   [8,'Support'],[9,'Support interface'],[17,'Support transition'],

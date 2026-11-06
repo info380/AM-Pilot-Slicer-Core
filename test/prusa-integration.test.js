@@ -8,6 +8,8 @@ import { runSlicerEngine } from '../src/engine.js';
 import { materializePlateInputs } from '../src/plate.js';
 import { compileProductionToolpath } from '../src/toolpath.js';
 import { runProcess } from '../src/process.js';
+import { canonicalizeGcodeHeader, inspectGcode } from '../src/gcode.js';
+import { readNativeStatistics } from '../src/native-feature-statistics.js';
 
 const command = process.env.PRUSA_SLICER_INTEGRATION_CMD;
 
@@ -278,4 +280,39 @@ test('PrusaSlicer preserves distinct AM Pilot plate placements', { skip: !comman
   assert.ok(layers[0].has(0.3), 'overridden instance has a 0.3 mm layer: ' + JSON.stringify({layers: layers.map(values => [...values]), lengths}));
   assert.ok(!layers[1].has(0.3), 'unmodified sibling retains plate layer height');
   assert.ok(lengths[0] > lengths[1] * 1.5, 'overridden instance produces denser extrusion paths');
+});
+
+
+// Manual qualification supplies both checksum-identified native binaries.
+// This verifies that collecting statistics does not alter printable output.
+test('native statistics exporter preserves stock Prusa G-code bytes', {
+  skip: !command || !process.env.PRUSA_STOCK_INTEGRATION_CMD
+}, async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'prusa-statistics-parity-'));
+  t.after(() => fs.rm(root, {recursive:true,force:true}));
+  const model = path.join(root, 'cube.stl');
+  await fs.writeFile(model, cubeStl);
+  for (const ironing of [false,true]) {
+    const outputs = [];
+    for (const [label,binary] of [['stock',process.env.PRUSA_STOCK_INTEGRATION_CMD],['candidate',command]]) {
+      const workDir = path.join(root, `${label}-${ironing}`);
+      await fs.mkdir(workDir);
+      const output = path.join(workDir,'output.gcode');
+      const configuration = path.join(workDir,'fixture.ini');
+      await fs.writeFile(configuration,`layer_height = 0.2\nfilament_diameter = 1.75\nfilament_density = 1.24\nironing = ${ironing?1:0}\n`);
+      await runProcess({command:binary,args:['--export-gcode','--threads','1',
+        '--load',configuration,'--output',output,model],cwd:workDir,timeoutMs:120000,maximumLogBytes:262144});
+      await canonicalizeGcodeHeader(output);
+      outputs.push(await fs.readFile(output));
+      if (label==='candidate') {
+        const stats = await readNativeStatistics(output+'.am-pilot-statistics.json',false);
+        const {metrics} = await inspectGcode(output,16*1024*1024);
+        assert.ok(Math.abs(stats.totalTimeSeconds-metrics.estimatedTimeSeconds)<1.5);
+        assert.ok(stats.rows.some(row=>row.featureId===2&&row.timeSeconds>0&&row.filamentMassG>0));
+        assert.ok(Math.abs(stats.rows.filter(row=>row.featureId!=null).reduce((sum,row)=>sum+row.filamentLengthMm,0)-metrics.filamentLengthMm)<1);
+        if (ironing) assert.ok(stats.rows.some(row=>row.featureId===14&&row.timeSeconds>0&&row.filamentMassG>0));
+      }
+    }
+    assert.deepEqual(outputs[1],outputs[0],`Native exporter altered printable G-code (ironing=${ironing})`);
+  }
 });

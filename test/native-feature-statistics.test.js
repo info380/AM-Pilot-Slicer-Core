@@ -6,12 +6,12 @@ import path from 'node:path';
 import {parseNativeStatistics,readNativeStatistics,nativeFeatureCatalog} from '../src/native-feature-statistics.js';
 
 const bambu = () => ({return_code:0,sliced_plates:[{id:1,total_predication:120,main_predication:100,
-  feature_type_times:{'Outer wall':60,'Bottom surface':10,'Gap infill':2,'Internal solid infill':20,Travel:8,Undefined:8}}]});
+  feature_type_times:{'Outer wall':60,'Bottom surface':10,'Gap infill':2,'Internal solid infill':20,'Floating vertical shell':1,Travel:8,Undefined:8}}]});
 test('preserves native Bambu times without double counting Undefined travel',()=>{
   const result=parseNativeStatistics(bambu(),true);
   assert.equal(result.totalTimeSeconds,120);
-  assert.deepEqual(result.rows,[{featureId:2,timeSeconds:60},{featureId:18,timeSeconds:10},{featureId:11,timeSeconds:2},{featureId:5,timeSeconds:20},{moveKey:'travel',timeSeconds:8}]);
-  assert.equal(result.rows.reduce((sum,row)=>sum+row.timeSeconds,0),100,'Does not scale feature times up to total');
+  assert.deepEqual(result.rows,[{featureId:2,timeSeconds:60},{featureId:18,timeSeconds:10},{featureId:11,timeSeconds:2},{featureId:5,timeSeconds:20},{featureId:16,timeSeconds:1},{moveKey:'travel',timeSeconds:8}]);
+  assert.equal(result.rows.reduce((sum,row)=>sum+row.timeSeconds,0),101,'Does not scale feature times up to total');
   assert.equal(nativeFeatureCatalog([{id:18,key:'bottom_surface',displayName:'bottom'}],true)[0].displayName,'Bottom surface');
 });
 test('converts native Prusa role consumption units and preserves movement times',()=>{
