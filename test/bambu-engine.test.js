@@ -9,8 +9,8 @@ import { BAMBU_ENGINE_KEY, BAMBU_STUDIO_VERSION, assertBambuEffectiveConfigurati
 import { compileProductionToolpath } from '../src/toolpath.js';
 import { resolveBambuPreset } from '../src/bambu-presets.js';
 
-const machine = { type: 'machine', name: 'Bambu Lab A1 0.4 nozzle', printer_model: 'Bambu Lab A1', nozzle_diameter: ['0.4'] };
-const filament = { type: 'filament', name: 'PLA', filament_diameter: ['1.75'], filament_type: ['PLA'], compatible_printers: [machine.name] };
+const machine = { type: 'machine', name: 'Bambu Lab A1 0.4 nozzle', printer_model: 'Bambu Lab A1', nozzle_diameter: ['0.4'], nozzle_volume_type:['Standard'] };
+const filament = { type: 'filament', name: 'PLA', filament_diameter: ['1.75'], filament_type: ['PLA'], filament_colour:['#AABBCC'], compatible_printers: [machine.name] };
 const processPreset = { type: 'process', name: 'Standard', compatible_printers: [machine.name], curr_bed_type: 'Textured PEI Plate' };
 const configuration = () => ({ engineAdapter: BAMBU_ENGINE_KEY, bambuConfig: { version: 1, machine: structuredClone(machine), filament: structuredClone(filament), process: structuredClone(processPreset) } });
 const limits = { maximumArchiveBytes: 1024 * 1024, maximumExpandedBytes: 1024 * 1024, maximumGcodeBytes: 1024 * 1024 };
@@ -22,7 +22,7 @@ const inspect = (bytes, other = {}) => inspectBambuOutput({ bytes, machine, fila
 
 test('Bambu requires fully resolved compatible single-filament presets and an explicit plate', () => {
   assert.doesNotThrow(() => assertBambuEffectiveConfiguration(configuration()));
-  for (const mutate of [c => c.bambuConfig.machine.inherits = 'base', c => c.bambuConfig.filament.compatible_printers = [],
+  for (const mutate of [c => c.bambuConfig.machine.nozzle_volume_type = [], c => delete c.bambuConfig.filament.filament_colour, c => c.bambuConfig.filament.filament_colour=['bad'], c => c.bambuConfig.machine.inherits = 'base', c => c.bambuConfig.filament.compatible_printers = [],
     c => c.bambuConfig.process.post_process = ['curl secret'], c => c.bambuConfig.machine.print_host = 'https://printer',
     c => c.bambuConfig.process.curr_bed_type = '', c => c.bambuConfig.filament.filament_type = ['PLA', 'PETG'],
     c => c.bambuConfig.machine.printer_model = 'Unqualified model', c => c.engineAdapter = 'fdm.am_pilot_prusa_core']) {
@@ -64,6 +64,8 @@ test(`real Bambu engine preserves ${model} ${nozzle} mm archive and preview plac
   for (const [kind, name] of [['process', presets.machine.default_print_profile], ['filament', `Generic PLA @BBL ${model}${nozzle === '0.2' ? ' 0.2 nozzle' : ''}`]]) {
     presets[kind] = (await resolveBambuPreset({ resourceRoot: resources, kind, name })).settings;
   }
+  presets.machine.nozzle_volume_type=[...presets.machine.default_nozzle_volume_type];
+  presets.filament.filament_colour=['#AABBCC'];
   presets.process.curr_bed_type = 'Textured PEI Plate';
   presets.process.ironing_type = 'top';
   presets.process.ironing_flow = '15%';
@@ -78,7 +80,7 @@ test(`real Bambu engine preserves ${model} ${nozzle} mm archive and preview plac
     '[Content_Types].xml': strToU8('<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/></Types>'),
     '_rels/.rels': strToU8('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Target="/3D/3dmodel.model" Id="rel-1" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>') }));
   const config = { bambuStudioCommand: command, workRoot: workDir, requestTimeoutMs: 30000, jobTimeoutMs: 120000,
-    maximumLogBytes: 262144, engineThreads:1, engineCpuAffinity:process.env.SLICER_TEST_CPU_AFFINITY||'none', maximumArchiveBytes: 8388608, maximumExpandedArchiveBytes: 16777216, maximumGcodeBytes: 8388608 };
+    maximumLogBytes: 262144, maximumPlateInputBytes:16777216, engineThreads:1, engineCpuAffinity:process.env.SLICER_TEST_CPU_AFFINITY||'none', maximumArchiveBytes: 8388608, maximumExpandedArchiveBytes: 16777216, maximumGcodeBytes: 8388608 };
   await verifyBambuStudio(config);
   const profile = createExecutionProfile();
   const result = await runBambuEngine({ profile, config, workDir, plateInputPaths: [platePath], effectiveConfiguration: { engineAdapter: BAMBU_ENGINE_KEY, bambuConfig: { version: 1, ...presets } } });

@@ -199,6 +199,7 @@ test('real Bambu worker applies whole-facet, partial, blocker and linked support
  const machine=(await resolveBambuPreset({resourceRoot,kind:'machine',name:'Bambu Lab A1 0.4 nozzle'})).settings;
  const preset=(await resolveBambuPreset({resourceRoot,kind:'process',name:machine.default_print_profile})).settings;
  const filament=(await resolveBambuPreset({resourceRoot,kind:'filament',name:'Generic PLA @BBL A1'})).settings;
+ machine.nozzle_volume_type=[...machine.default_nozzle_volume_type];filament.filament_colour=['#AABBCC'];
  Object.assign(preset,{curr_bed_type:'Textured PEI Plate',enable_support:'1',support_type:'normal(manual)',support_on_build_plate_only:'0',support_remove_small_overhang:'0',support_threshold_angle:'30'});
  const config={prusaSlicerCommand:process.env.PRUSA_SLICER_INTEGRATION_CMD,bambuStudioCommand:process.env.BAMBU_STUDIO_INTEGRATION_CMD,
   jobTimeoutMs:120000,maximumLogBytes:262144,maximumNormalizedModelBytes:67108864,maximumTotalNormalizedBytes:134217728,maximumPlateInputBytes:201326592,

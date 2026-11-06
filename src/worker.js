@@ -339,6 +339,8 @@ export const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal, n
     });
     finishStage('slicingAndValidation');
     logEngineProfile('completed');
+    if(result.nativeConfigurationEvidence)log('info','slicer_native_configuration_verified',{runId:run.id,...result.nativeConfigurationEvidence});
+    for(const diagnostic of result.engineDiagnostics||[])log('info','slicer_engine_diagnostic',{runId:run.id,...diagnostic});
     await sendProgress({
       stage: 'compiling-preview',
       progressPercent: 90,
