@@ -28,7 +28,7 @@ export const assertBambuMachineOverrideResult=(ownership,machine,settings)=>{
   for(const [key,value] of Object.entries(overrides.scripts))if(settings[key]!==value)fail(`The native engine changed the reviewed machine script ${key}. No print file was accepted.`);
 };
 
-export const rewriteReviewedBambuProject=(input,presets,limit)=>{
+export const readBoundedBambuProject=(input,limit)=>{
   if(!Number.isSafeInteger(limit)||limit<=0||input.length>limit)fail('An explicit native project byte limit is required.');
   let entries=0,expanded=0;const seen=new Set();
   let files;try{files=unzipSync(input,{filter:entry=>{
@@ -37,6 +37,11 @@ export const rewriteReviewedBambuProject=(input,presets,limit)=>{
     seen.add(entry.name.toLowerCase());return true;
   }});}catch(error){if(error instanceof WorkerError)throw error;fail('The generated native project is not a valid bounded archive.');}
   if(!files['3D/3dmodel.model']?.length)fail('The native project has no model geometry.');
+  return {files,expanded};
+};
+
+export const rewriteReviewedBambuProject=(input,presets,limit)=>{
+  const {files,expanded}=readBoundedBambuProject(input,limit);
   const bytes=files['Metadata/project_settings.config'];if(!bytes||bytes.length>2*1024*1024)fail('The native project has no bounded settings evidence.');
   let original;try{original=JSON.parse(strFromU8(bytes));}catch{fail('The native project has invalid settings evidence.');}
   if(original.printer_model!==presets.machine.printer_model||original.nozzle_diameter?.length!==1||Number(original.nozzle_diameter[0])!==Number(presets.machine.nozzle_diameter?.[0]))fail('The generated native project changed the reviewed printer identity.');
@@ -44,21 +49,63 @@ export const rewriteReviewedBambuProject=(input,presets,limit)=>{
   for(const key of ['type','name','from'])delete settings[key];
   files['Metadata/project_settings.config']=strToU8(JSON.stringify(settings));
   if(files['Metadata/project_settings.config'].length>2*1024*1024 || expanded-bytes.length+files['Metadata/project_settings.config'].length>limit)fail('Reviewed settings exceed the native project byte limit.');
+  applyBambuHandoffMetadata(files,presets);
+  if(Object.values(files).reduce((sum,value)=>sum+value.length,0)>limit)fail('Native handoff metadata exceeds the expanded plate budget.');
   const output=zipSync(files);if(output.length>limit)fail('The reviewed native project exceeds its byte limit.');return output;
 };
+
+
+// Native metadata is derived from the same immutable, fully resolved settings.
+// Logical nozzle IDs are zero based; Bambu's XML physical extruder IDs are one based.
+export const applyBambuHandoffMetadata=(files,presets)=>{
+  const diameter=presets.machine.nozzle_diameter;
+  const volume=presets.machine.nozzle_volume_type;
+  if(!Array.isArray(diameter)||diameter.length!==1||!Number.isFinite(Number(diameter[0]))||Number(diameter[0])<=0
+    ||!Array.isArray(volume)||volume.length!==1||!['Standard','High Flow','TPU High Flow','E3D High Flow'].includes(volume[0]))
+    fail('The reviewed hardware must declare one explicit nozzle diameter and volume type.');
+  const color=presets.filament.filament_colour;
+  if(!Array.isArray(color)||color.length!==1||typeof color[0]!=='string'||!/^#[0-9a-f]{6}$/i.test(color[0]))
+    fail('The native handoff requires the explicit reviewed filament colour.');
+  const settingsName='Metadata/project_settings.config';
+  let settings={};
+  if(files[settingsName]){
+    if(files[settingsName].length>2*1024*1024)fail('The native project settings exceed the metadata budget.');
+    try{settings=JSON.parse(strFromU8(files[settingsName]));}catch{fail('The native project settings are invalid.');}
+    if(!settings||typeof settings!=='object'||Array.isArray(settings))fail('The native project settings must be an object.');
+  }
+  settings.filament_colour=[color[0].toUpperCase()];
+  files[settingsName]=strToU8(JSON.stringify(settings));
+  if(files[settingsName].length>2*1024*1024)fail('The native project settings exceed the metadata budget.');
+  const name='Metadata/model_settings.config';
+  let xml=files[name]?strFromU8(files[name]):'<?xml version="1.0" encoding="UTF-8"?><config><plate><metadata key="plater_id" value="1"/></plate></config>';
+  if(xml.length>2*1024*1024||/<!DOCTYPE|<!ENTITY|<plate\s*\/>/i.test(xml)||[...xml.matchAll(/<plate(?:\s[^>]*)?>/g)].length!==1
+    ||[...xml.matchAll(/<\/plate>/g)].length!==1)fail('The native metadata must describe one bounded plate.');
+  const nozzle=`<nozzle id="0" extruder_id="1" nozzle_diameter="${Number(diameter[0])}" volume_type="${volume[0]}"/>`;
+  const present=[...xml.matchAll(/<nozzle\b[^>]*\/>/g)];
+  if(present.length>1||[...xml.matchAll(/<nozzle\b/g)].length!==present.length)fail('The native project contains unexpected nozzle metadata.');
+  if(present.length){
+    const attribute=key=>present[0][0].match(new RegExp('\\b'+key+'="([^"]*)"'))?.[1];
+    if(attribute('id')!=='0'||attribute('extruder_id')!=='1'||Number(attribute('nozzle_diameter'))!==Number(diameter[0])||attribute('volume_type')!==volume[0])
+      fail('The native nozzle metadata differs from the reviewed hardware.');
+    xml=xml.replace(present[0][0],nozzle);
+  }else xml=xml.replace('</plate>',nozzle+'</plate>');
+  files[name]=strToU8(xml);
+  if(files[name].length>2*1024*1024)fail('The native nozzle metadata exceeds the metadata budget.');
+};
+export const bambuHandoffArguments=(paths,presets)=>['--uptodate','--uptodate-settings',`${paths.machine};${paths.process}`, '--filament-colour',presets.filament.filament_colour[0]];
 
 // Bambu's CLI applies cross-printer conversion caps when a geometry-only input
 // acquires a new printer preset. A native project with that same printer keeps
 // its reviewed settings. Let the pinned engine create the native project itself;
 // never spoof its generator marker or edit the installed CLI resource limits.
 export async function prepareBambuMachineProject({ownership,presets,paths,sourcePath,workDir,config,signal,cpuAffinityCount}){
-  const overrides=reviewedBambuMachineOverrides(ownership,presets.machine);
-  if(!Object.keys(overrides.motion).length&&!Object.keys(overrides.scripts).length)return sourcePath;
+  reviewedBambuMachineOverrides(ownership,presets.machine);
+  if(!Number.isSafeInteger(config?.maximumPlateInputBytes)||config.maximumPlateInputBytes<=0)fail('An explicit native project byte limit is required.');
   const limit=config.maximumPlateInputBytes;
   if(!Number.isSafeInteger(limit)||limit<=0)fail('An explicit native project byte limit is required.');
   const generatedPath=path.join(workDir,'native-machine-project.3mf');
   await runProcess({command:config.bambuStudioCommand,args:['--debug','2','--datadir',path.join(workDir,'bambu-project-data'),'--arrange','0','--orient','0','--skip-useless-pick',
-    '--load-settings',`${paths.machine};${paths.process}`,'--load-filaments',paths.filament,
+    '--load-settings',`${paths.machine};${paths.process}`,...bambuHandoffArguments(paths,presets),'--load-filaments',paths.filament,
     '--export-3mf',path.basename(generatedPath),'--outputdir',workDir,sourcePath],cwd:workDir,timeoutMs:config.jobTimeoutMs,maximumLogBytes:config.maximumLogBytes,signal,cpuAffinityCount});
   const info=await fs.lstat(generatedPath);if(!info.isFile()||info.size>limit)fail('The native machine project exceeds its byte limit.');
   const output=rewriteReviewedBambuProject(await fs.readFile(generatedPath),presets,limit);

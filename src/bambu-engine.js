@@ -1,3 +1,5 @@
+import {verifyBambuRuntimeSettings} from './bambu-configuration-validation.js';
+import {classifyBambuDiagnostics} from './bambu-diagnostics.js';
 import { profileExecutionPhase } from './execution-profile.js';
 import {layerGcodeBlock} from './layer-gcode.js';
 import { createHash } from 'node:crypto';
@@ -6,9 +8,9 @@ import path from 'node:path';
 import { unzipSync, strFromU8 } from 'fflate';
 import { WorkerError } from './errors.js';
 import { runProcess } from './process.js';
-import { inspectGcode, extractWarnings } from './gcode.js';
+import { inspectGcode } from './gcode.js';
 import { normalizeFdmPausePoints,normalizeFdmCustomGcodePoints } from './preparation-contract.js';
-import {prepareBambuMachineProject,assertBambuMachineOverrideResult} from './bambu-machine-project.js';
+import {prepareBambuMachineProject,assertBambuMachineOverrideResult,bambuHandoffArguments} from './bambu-machine-project.js';
 
 export const BAMBU_ENGINE_KEY = 'fdm.am_pilot_bambu_core';
 export const BAMBU_STUDIO_VERSION = '02.08.02.61';
@@ -38,7 +40,9 @@ export const assertBambuEffectiveConfiguration = configuration => {
     }
   }
   if (!['Bambu Lab A1', 'Bambu Lab A2L'].includes(machine.printer_model)
-    || !(Number(single(machine.nozzle_diameter)) > 0)
+    || !Number.isFinite(Number(single(machine.nozzle_diameter))) || !(Number(single(machine.nozzle_diameter)) > 0)
+    || !['Standard','High Flow','TPU High Flow','E3D High Flow'].includes(single(machine.nozzle_volume_type))
+    || typeof single(filament.filament_colour)!=='string' || !/^#[0-9A-F]{6}$/.test(single(filament.filament_colour))
     || single(filament.filament_diameter) !== '1.75'
     || typeof single(filament.filament_type) !== 'string') {
     throw failure('A supported single-filament Bambu machine, nozzle and material are required.');
@@ -72,7 +76,7 @@ export const verifyBambuStudio = async config => {
 };
 
 // Inspect only bounded, in-memory entries. No archive-supplied path is extracted.
-export const inspectBambuOutput = ({ bytes, machine, filament, machineOverrides, maximumArchiveBytes, maximumExpandedBytes, maximumGcodeBytes }) => {
+export const inspectBambuOutput = ({ bytes, machine, filament, process:processSettings, machineOverrides, maximumArchiveBytes, maximumExpandedBytes, maximumGcodeBytes }) => {
   for (const limit of [maximumArchiveBytes, maximumExpandedBytes, maximumGcodeBytes]) {
     if (!Number.isSafeInteger(limit) || limit <= 0) throw failure('Explicit archive limits are required.');
   }
@@ -117,13 +121,14 @@ export const inspectBambuOutput = ({ bytes, machine, filament, machineOverrides,
     || single(settings.filament_type) !== single(filament.filament_type)) {
     throw failure('Bambu output does not match the requested hardware and material.', 'slicer_bambu_output_mismatch');
   }
+  const settingsValidation=processSettings ? verifyBambuRuntimeSettings({machine,process:processSettings,filament},settings) : null;
   const gcode = files[plates[0]];
   assertBambuMachineOverrideResult(machineOverrides,machine,settings);
   if (!gcode?.length || gcode.includes(0) || !strFromU8(gcode.subarray(0, 256)).includes(`; BambuStudio ${BAMBU_STUDIO_VERSION}`)) {
     throw failure('Bambu output lacks the expected generator evidence.', 'slicer_gcode_header_invalid');
   }
   return { gcode, archiveArtifact: { checksumSha256: digest(bytes), sizeBytes: bytes.length, contentType: BAMBU_ARCHIVE_CONTENT_TYPE },
-    platePath: plates[0] };
+    platePath: plates[0],settingsValidation,primeTowerDisabled:settings.enable_prime_tower==='0' };
 };
 
 export const runBambuEngine = async ({ plateInputPaths, effectiveConfiguration, pausePoints = [], customGcodePoints = [], workDir, config, signal, onProgress = async () => {}, profile = null }) => {
@@ -156,7 +161,7 @@ export const runBambuEngine = async ({ plateInputPaths, effectiveConfiguration, 
     cpuAffinityCount: affinityCount(config), profile,
     args: ['--debug', '2', '--datadir', path.join(workDir, 'bambu-data'), '--arrange', '0', '--orient', '0',
       '--skip-useless-pick', '--min-save', '--load-settings', `${paths.machine};${paths.process}`,
-      '--load-filaments', paths.filament, ...(paths.pauses ? ['--load-custom-gcodes', paths.pauses] : []),
+      ...bambuHandoffArguments(paths,presets), '--load-filaments', paths.filament, ...(paths.pauses ? ['--load-custom-gcodes', paths.pauses] : []),
       '--slice', '0', '--export-3mf', 'output.gcode.3mf', '--outputdir', workDir, ...plateInputPaths],
     cwd: workDir, timeoutMs: config.jobTimeoutMs, maximumLogBytes: config.maximumLogBytes, signal });
   await phase('validationProgress', () => onProgress({ stage: 'validating', progressPercent: 85, message: 'Checking Bambu archive and matching preview evidence.' }));
@@ -166,13 +171,14 @@ export const runBambuEngine = async ({ plateInputPaths, effectiveConfiguration, 
     const info = await fs.lstat(archivePath);
     if (!info.isFile() || info.size > config.maximumArchiveBytes) throw failure('Invalid Bambu archive output.', 'slicer_bambu_archive_size_invalid');
     const inspected = inspectBambuOutput({ bytes: new Uint8Array(await fs.readFile(archivePath)),
-      machine: presets.machine, filament: presets.filament, machineOverrides:effectiveConfiguration.ownership?.machine, maximumArchiveBytes: config.maximumArchiveBytes,
+      machine: presets.machine, filament: presets.filament, process:presets.process, machineOverrides:effectiveConfiguration.ownership?.machine, maximumArchiveBytes: config.maximumArchiveBytes,
       maximumExpandedBytes: config.maximumExpandedArchiveBytes, maximumGcodeBytes: config.maximumGcodeBytes });
     // Preserve bytes exactly: the displayed toolpaths must describe the archive's G-code.
     await fs.writeFile(gcodePath, inspected.gcode, { mode: 0o600 });
     return inspected;
   });
   const inspection = await phase('gcodeInspection', () => inspectGcode(gcodePath, config.maximumGcodeBytes));
-  return { gcodePath, archivePath, artifact: inspection.artifact, archiveArtifact: inspected.archiveArtifact,
-    metrics: inspection.metrics, warnings: extractWarnings(processResult) };
+  const classified=classifyBambuDiagnostics(processResult,{engineVersion:BAMBU_STUDIO_VERSION,singleFilament:true,primeTowerDisabled:inspected.primeTowerDisabled});
+  return { nativeConfigurationEvidence:inspected.settingsValidation,engineDiagnostics:classified.diagnostics, gcodePath, archivePath, artifact: inspection.artifact, archiveArtifact: inspected.archiveArtifact,
+    metrics: inspection.metrics, warnings: classified.warnings };
 };
