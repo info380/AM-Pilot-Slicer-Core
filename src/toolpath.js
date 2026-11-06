@@ -26,7 +26,8 @@ const MOVE_KINDS = Object.freeze([
   Object.freeze({ id: 0, key: 'travel', displayName: 'Travel' }),
   Object.freeze({ id: 1, key: 'extrusion', displayName: 'Extrusion' }),
   Object.freeze({ id: 2, key: 'retraction', displayName: 'Retraction' }),
-  Object.freeze({ id: 3, key: 'unretraction', displayName: 'Unretraction' })
+  Object.freeze({ id: 3, key: 'unretraction', displayName: 'Unretraction' }),
+  Object.freeze({ id: 4, key: 'wipe', displayName: 'Wipe' })
 ]);
 
 const FEATURES = Object.freeze([
@@ -230,6 +231,7 @@ export const compileProductionToolpath = async ({
   let currentFeature = 0;
   let currentWidthMm = null;
   let currentHeightMm = null;
+  let wiping = false;
   let coordinatesAbsolute = true;
   let extrusionAbsolute = true;
   let activeTool = 0;
@@ -328,6 +330,8 @@ export const compileProductionToolpath = async ({
       }
       if (bambu && /^;\s*SKIPPABLE_END\b/.test(rawLine)) { skippedBambuBlock = false; continue; }
       if (skippedBambuBlock) continue;
+      if (/^;\s*WIPE_START\b/i.test(rawLine)) { wiping = true; continue; }
+      if (/^;\s*WIPE_END\b/i.test(rawLine)) { wiping = false; continue; }
       let match = rawLine.match(bambu ? /^;\s*CHANGE_LAYER\b/i : /^;\s*LAYER_CHANGE\b/i);
       if (match) {
         finalizeLayer();
@@ -469,7 +473,7 @@ export const compileProductionToolpath = async ({
         throw toolpathError(`G-code line ${lineNumber} moves without a positive feed rate.`);
       }
       const durationSeconds = hasMotion ? distanceMm / speedMmPerS : 0;
-      const moveKind = hasMotion ? (hasExtrusion ? 1 : 0) : (hasRetraction ? 2 : 3);
+      const moveKind = hasMotion ? (wiping ? 4 : hasExtrusion ? 1 : 0) : (hasRetraction ? 2 : 3);
       const widthMm = moveKind === 1 ? Number(currentWidthMm) : 0;
       const heightMm = moveKind === 1 ? Number(currentHeightMm) : 0;
       if (moveKind === 1 && (!Number.isFinite(widthMm) || widthMm <= 0 || !Number.isFinite(heightMm) || heightMm <= 0)) {

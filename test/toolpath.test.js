@@ -246,3 +246,12 @@ test('Bambu native roles and consumption match the print bytes without changing 
  assert.equal(await fs.readFile(file,'utf8'),source);
  assert.equal(result.header.source.gcodeChecksumSha256,sha256(source));
 });
+
+test('native wipe motion is separate from travel and retraction',async t=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'native-wipe-'));t.after(()=>fs.rm(root,{recursive:true,force:true}));
+ const source=gcode.replace('G1 X110 Y105 F600',';WIPE_START\nG1 X110 Y105 E-0.1 F600\n;WIPE_END');
+ const result=await artifactFor(root,source);
+ assert.equal(result.header.statistics.moveRecordCounts.wipe,1);
+ assert.equal(result.header.statistics.moveRecordCounts.travel,1,'The inter-layer Z move remains travel');
+ assert.equal(result.header.catalogs.moveKinds[4].displayName,'Wipe');
+});
