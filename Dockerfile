@@ -3,7 +3,7 @@
 ARG DEBIAN_BUILD_IMAGE=debian:bookworm-20250811-slim@sha256:b1a741487078b369e78119849663d7f1a5341ef2768798f7b7406c4240f86aef
 ARG NODE_RUNTIME_IMAGE=node:22.23.4-bookworm-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da
 ARG DEBIAN_BUILD_SNAPSHOT=20250811T000000Z
-ARG DEBIAN_RUNTIME_SNAPSHOT=20260904T094338Z
+ARG DEBIAN_RUNTIME_SNAPSHOT=20261105T000000Z
 
 FROM ${DEBIAN_BUILD_IMAGE} AS prusa-build
 
@@ -129,8 +129,8 @@ RUN printf '%s\n' \
     && apt-get -o Acquire::Check-Valid-Until=false update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       libgnutls30=3.7.9-2+deb12u7 \
-      libpcre2-8-0=10.42-1+deb12u1 \
-      libpng16-16=1.6.39-2+deb12u5 \
+      libpcre2-8-0=10.42-1+deb12u2 \
+      libpng16-16=1.6.39-2+deb12u6 \
     && rm -rf /var/lib/apt/lists/* \
     && test -d /usr/local/lib/node_modules/npm \
     && test -d /opt/yarn-v1.22.22 \

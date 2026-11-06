@@ -33,3 +33,21 @@ qualified. Before release:
 The local native build was blocked on 6 November 2026 by gateway errors from
 the pinned Debian snapshot package service. No alternative package versions
 or unverified native runtime were substituted.
+
+
+The 6 November candidate rebuild also updates the runtime package snapshot to
+`20261105T000000Z`: PCRE2 `10.42-1+deb12u2` matches the exact pinned Node image
+rather than downgrading it, and libpng `1.6.39-2+deb12u6` is the fixed version
+listed by that official security snapshot. GnuTLS stays `3.7.9-2+deb12u7`.
+The upstream Prusa source, build snapshot and native dependency versions are
+unchanged. Package downgrades are rejected by the release contract. The signed
+snapshot package index and image SBOM retain the package integrity evidence.
+
+
+The existing manual candidate workflow runs `qualify-statistics.sh`. It reuses
+its cached native builder, reverses only this exporter patch, rebuilds the stock
+binary with the same compiler/dependencies, and compares timestamp-canonicalized
+G-code bytes with and without ironing. The worker-process tests also assert
+native timing and role consumption. This step is manual-dispatch-only; automatic
+PR verification and tag-release runtime budgets are not expanded. No candidate
+image is a production engine registration.
