@@ -4,11 +4,12 @@ This source notice covers the control/candidate executables from the manual
 seam-visibility prototype build. The release runtime plan explicitly selects
 its measured candidate for a new signed OCI release.
 The control is an unmodified source build; the candidate includes the
-slice-local visibility patch. Both use GNU AGPLv3-covered Bambu Studio code.
+slice-local visibility patch and the zero top/bottom paint penetration minimum
+correction. Both use GNU AGPLv3-covered Bambu Studio code.
 
 - [Exact upstream source archive](https://codeload.github.com/bambulab/BambuStudio/tar.gz/926a7192574bcb9b3a732e1ec59a46d79cb45466)
   — SHA-256 `3c0d92559057709a2e500824acb1cfc4b93e0ef0a218c2e404e2ce466b0c7d4b`.
-- [Exact AM Pilot prototype source tree used by the corrected compiler job](https://github.com/info380/AM-Pilot-Slicer-Core/tree/df8d6e9a2de238a998d07d0b2a2ff207dea19f85/native/bambu)
+- [Exact AM Pilot prototype source tree used by the corrected compiler job](https://github.com/info380/AM-Pilot-Slicer-Core/tree/c26d824c8326db943fc6651a726d633f075b6240/native/bambu)
   — contains the patch, preferred header source, native lifetime/eligibility tests,
   build script and checksum-locked build plan.
 - [GNU AGPLv3 license](../../LICENSE).

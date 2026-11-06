@@ -425,5 +425,37 @@
       "ASan",
       "UBSan"
     ]
+  },
+  "zeroPaintPenetration": {
+    "measuredAt": "2026-11-06T15:24:56.228888+00:00",
+    "status": "synthetic-native-qualified",
+    "productionActivation": false,
+    "nativeSourceRevision": "c26d824c8326db943fc6651a726d633f075b6240",
+    "buildRunId": 42234993074,
+    "binarySha256": "9e8c9df73f6c54f3d861b4f3157d1a41fdd1f4ffed65824d41b963d2482351d3",
+    "controlBinarySha256": "4f108b2c8ea84e7a829117521d22ef5f1a5b129934c52f22713dc5988e3d052a",
+    "patchSha256": "a31d0185c6c2b9297d3807f6d322d09d28dfcbf9e08d70590eca38c7bc8cd93b",
+    "stockControlCandidateCases": 14,
+    "stockControlCandidateRuns": 42,
+    "settingsMatch": true,
+    "seamsMatch": true,
+    "depositedGeometryMatch": true,
+    "machines": [
+      "Bambu Lab A1",
+      "Bambu Lab A2L"
+    ],
+    "nozzleDiametersMm": [
+      0.2,
+      0.4,
+      0.6,
+      0.8
+    ],
+    "zeroRoundtripCasesPassed": 8,
+    "topPaintPenetrationLayers": 0,
+    "bottomPaintPenetrationLayers": 0,
+    "ordinaryShellsPreserved": true,
+    "acceptanceToolSha256": "5fcbea53135703788bf4b342b3e45cb3eb104c2e82815714bf84e3049a084641",
+    "acceptanceLogSha256": "89679a179fdaca8f485872b97f11c99aa8172b9a568f1485da47d277412dee59",
+    "publicFixturesOnly": true
   }
 }

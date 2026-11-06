@@ -26,6 +26,9 @@ async function fixture(t, { failed = false, tamperLibrary = false, unsafe = fals
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'native-package-test-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const plan = await loadPlan();
+  // This fixture builds a synthetic archive from the current source patch;
+  // it does not qualify that patch against the production runtime plan.
+  plan.patchSha256 = hash(await fs.readFile(new URL('seam-visibility-reuse.patch', import.meta.url)));
   const binary = Buffer.from('synthetic native bytes'), library = Buffer.from('synthetic dependency bytes');
   plan.binarySha256 = hash(binary); plan.libraries = { 'libsynthetic.so.1': hash(library) };
   const files = {
