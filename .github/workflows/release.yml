@@ -75,6 +75,12 @@ jobs:
             --input-type=module \
             --eval "const { verifyPrusaSlicer } = await import('./src/engine.js'); const version = await verifyPrusaSlicer({ prusaSlicerCommand: process.env.PRUSA_SLICER_CMD, workRoot: process.env.SLICER_WORK_ROOT, requestTimeoutMs: 30000, maximumLogBytes: 262144 }); process.stdout.write(version);" \
             | grep -F '2.9.3'
+      - name: Qualify the native statistics exporter against stock G-code
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: bash native/prusa/qualify-statistics.sh "${IMAGE}@${DIGEST}" release-evidence
       - name: Scan immutable image digest
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:

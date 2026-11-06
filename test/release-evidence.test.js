@@ -38,6 +38,7 @@ test('generated release evidence matches the worker support-paint capability bef
     assert.equal(evidence.semanticVersion, `v${manifest.version}`);
     assert.equal(evidence.imageDigest, digest);
     assert.equal(evidence.source.revision, revision);
+    assert.match(evidence.source.prusaNativeStatisticsPatchChecksumSha256,/^[a-f0-9]{64}$/);
     assert.equal(evidence.qualification.status, 'candidate');
   } finally {
     await rm(directory, { recursive: true, force: true });

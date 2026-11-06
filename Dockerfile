@@ -3,7 +3,7 @@
 ARG DEBIAN_BUILD_IMAGE=debian:bookworm-20250811-slim@sha256:b1a741487078b369e78119849663d7f1a5341ef2768798f7b7406c4240f86aef
 ARG NODE_RUNTIME_IMAGE=node:22.23.4-bookworm-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da
 ARG DEBIAN_BUILD_SNAPSHOT=20250811T000000Z
-ARG DEBIAN_RUNTIME_SNAPSHOT=20260904T094338Z
+ARG DEBIAN_RUNTIME_SNAPSHOT=20261105T000000Z
 
 FROM ${DEBIAN_BUILD_IMAGE} AS prusa-build
 
@@ -68,6 +68,9 @@ RUN mkdir -p deps/.pkg_cache/GMP \
 RUN cmake --preset no-occt -S deps \
     && cmake --build deps/build-no-occt --parallel 2
 
+COPY native/prusa/native-statistics.patch /tmp/native-statistics.patch
+RUN git apply --check /tmp/native-statistics.patch && git apply /tmp/native-statistics.patch
+
 RUN cmake -S . -B build -G Ninja \
       -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_INSTALL_PREFIX=/opt/prusa \
@@ -91,6 +94,18 @@ RUN cmake -S . -B build -G Ninja \
     && ! grep -F 'not found' /tmp/prusa-slicer-ldd.txt \
     && LD_LIBRARY_PATH=/opt/prusa/lib /opt/prusa/bin/prusa-slicer --help \
       | grep -F '2.9.3'
+
+# Manual statistics qualification reverses only the exporter with the same
+# cached compiler/dependencies. Export one binary instead of loading the full
+# compiler filesystem into Docker. Ordinary runtime builds skip these stages.
+FROM prusa-build AS prusa-statistics-control-build
+RUN --network=none cd /src \
+    && git apply --reverse --check /tmp/native-statistics.patch \
+    && git apply --reverse /tmp/native-statistics.patch \
+    && cmake --build build --parallel 2 --target PrusaSlicer \
+    && test -x build/src/prusa-slicer
+FROM scratch AS prusa-statistics-control
+COPY --from=prusa-statistics-control-build /src/build/src/prusa-slicer /prusa-slicer-stock
 
 FROM ${NODE_RUNTIME_IMAGE} AS worker-dependencies
 WORKDIR /worker
@@ -126,9 +141,10 @@ RUN printf '%s\n' \
     && apt-get -o Acquire::Check-Valid-Until=false update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       libgnutls30=3.7.9-2+deb12u7 \
-      libpcre2-8-0=10.42-1+deb12u1 \
-      libpng16-16=1.6.39-2+deb12u5 \
+      libpcre2-8-0=10.42-1+deb12u2 \
+      libpng16-16=1.6.39-2+deb12u6 \
     && rm -rf /var/lib/apt/lists/* \
+    && dpkg --purge apt libapt-pkg6.0 \
     && test -d /usr/local/lib/node_modules/npm \
     && test -d /opt/yarn-v1.22.22 \
     && rm -rf /usr/local/lib/node_modules /opt/yarn-v1.22.22 \

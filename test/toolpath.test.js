@@ -225,3 +225,33 @@ test('custom layer commands retain real layer identity and ignore injected metad
  const block=layerGcodeBlock({id:'custom',zMm:.2,gcode:';LAYER_CHANGE\n;Z:99\n;TYPE:Support material\n;WIDTH:9\n;HEIGHT:9\n; estimated printing time = 1s\nG1 X105 Y100 E0.1 F600'});
  const artifact=await artifactFor(root,gcode.replace(';WIDTH:0.45\n',';WIDTH:0.45\n'+block+'\n'));assert.equal(artifact.header.layerCount,2);assert.deepEqual(artifact.header.layers.map(layer=>layer.zMm),[.2,.4]);assert(artifact.header.statistics.featureRecordCounts.custom>0);
 });
+
+test('Bambu native roles and consumption match the print bytes without changing G-code',async t=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'native-bambu-legend-'));t.after(()=>fs.rm(root,{recursive:true,force:true}));
+ const source=['G90','M83','G1 X100 Y100 Z0.2 F6000','; CHANGE_LAYER','; Z_HEIGHT: 0.2','; LAYER_HEIGHT: 0.2','; LINE_WIDTH: 0.45',
+  '; FEATURE: Bottom surface','G1 X101 E1 F1200','; FEATURE: Gap infill','G1 X102 E2',
+  '; FEATURE: Floating vertical shell','G1 X103 E3','; FEATURE: Brim','G1 X104 E4'].join('\n');
+ const file=path.join(root,'output.gcode');await fs.writeFile(file,source);
+ const config={...effectiveConfiguration,engineAdapter:'fdm.am_pilot_bambu_core',bambuConfig:{filament:{filament_diameter:['1.75'],filament_density:['1.26']}}};
+ const result=await compileProductionToolpath({gcodePath:file,workDir:root,run:{...run,engineKey:config.engineAdapter},effectiveConfiguration:config,
+  gcodeArtifact:{checksumSha256:sha256(source)},sliceEvidenceChecksumSha256:'a'.repeat(64),summary:{layerCount:1},maximumBytes:1024*1024,
+  nativeStatistics:{schemaVersion:1,timeBasis:'native-normal-mode',filamentBasis:'gcode-model-extrusion',reportChecksumSha256:'b'.repeat(64),totalTimeSeconds:60,rows:[18,11,5,19].map(featureId=>({featureId,timeSeconds:10}))}});
+ assert.equal(result.header.statistics.featureRecordCounts.bottom_surface,1);
+ assert.equal(result.header.statistics.featureRecordCounts.gap_fill,1);
+ assert.equal(result.header.statistics.featureRecordCounts.solid_infill,1);
+ assert.equal(result.header.statistics.featureRecordCounts.floating_vertical_shell,0);
+ assert.equal(result.header.statistics.featureRecordCounts.brim,1);
+ assert.deepEqual(result.header.statistics.native.rows.map(row=>row.filamentLengthMm),[1,2,3,4]);
+ assert.equal(result.header.catalogs.features[11].displayName,'Gap infill');
+ assert.equal(await fs.readFile(file,'utf8'),source);
+ assert.equal(result.header.source.gcodeChecksumSha256,sha256(source));
+});
+
+test('native wipe motion is separate from travel and retraction',async t=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'native-wipe-'));t.after(()=>fs.rm(root,{recursive:true,force:true}));
+ const source=gcode.replace('G1 X110 Y105 F600',';WIPE_START\nG1 X110 Y105 E-0.1 F600\n;WIPE_END');
+ const result=await artifactFor(root,source);
+ assert.equal(result.header.statistics.moveRecordCounts.wipe,1);
+ assert.equal(result.header.statistics.moveRecordCounts.travel,1,'The inter-layer Z move remains travel');
+ assert.equal(result.header.catalogs.moveKinds[4].displayName,'Wipe');
+});

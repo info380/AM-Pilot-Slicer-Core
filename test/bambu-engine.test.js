@@ -104,12 +104,14 @@ test(`real Bambu engine preserves ${model} ${nozzle} mm archive and preview plac
     run: { id: 'bambu-integration', engineKey: BAMBU_ENGINE_KEY },
     effectiveConfiguration: { engineAdapter: BAMBU_ENGINE_KEY, bambuConfig: { version: 1, ...presets },
       coordinateMapping: { projectOrigin: 'center', translationMm: { x: 128, y: 128, z: 0 } } },
-    gcodeArtifact: result.artifact, sliceEvidenceChecksumSha256: 'a'.repeat(64), summary: result.metrics, maximumBytes: 16777216 });
+    gcodeArtifact: result.artifact, sliceEvidenceChecksumSha256: 'a'.repeat(64), summary: result.metrics, nativeStatistics:result.nativeStatistics, maximumBytes: 16777216 });
   assert.equal(preview.header.layerCount, result.metrics.layerCount);
   assert.ok(preview.header.statistics.featureRecordCounts.external_perimeter > 20);
   assert.ok(preview.header.statistics.featureRecordCounts.ironing > 0);
   assert.equal(preview.header.source.gcodeChecksumSha256, result.artifact.checksumSha256);
   assert.equal(preview.header.interpretation.dialect, 'bambu');
+  assert.equal(preview.header.statistics.native.timeBasis,'native-normal-mode');
+  assert.ok(preview.header.statistics.native.rows.some(row=>row.featureId===18&&row.filamentMassG>0));
   assert.deepEqual(preview.header.catalogs.tools.map(tool => tool.id), [0]);
   const custom=structuredClone(presets),motionOverrides={machine_max_acceleration_travel:13000,machine_max_acceleration_x:16000,machine_max_acceleration_y:16000};
   for(const [key,value] of Object.entries(motionOverrides))custom.machine[key][0]=String(value);

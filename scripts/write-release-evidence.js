@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 
 import {
   CAPABILITY_REVISION_ID,
@@ -39,6 +40,7 @@ const evidence = {
     prusaSlicerVersion: PRUSA_SLICER_VERSION,
     prusaSlicerUpstreamCommit: PRUSA_SLICER_UPSTREAM_COMMIT,
     prusaSlicerSourceArchiveChecksumSha256: PRUSA_SLICER_SOURCE_SHA256,
+    prusaNativeStatisticsPatchChecksumSha256: createHash('sha256').update(fs.readFileSync(new URL('../native/prusa/native-statistics.patch',import.meta.url))).digest('hex'),
     gmpVersion: GMP_VERSION,
     gmpSourceArchiveChecksumSha256: GMP_SOURCE_SHA256
   },

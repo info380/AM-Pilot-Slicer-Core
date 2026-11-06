@@ -1,0 +1,50 @@
+--- a/src/libslic3r/GCode.cpp
++++ b/src/libslic3r/GCode.cpp
+@@ -20,6 +20,10 @@
+ ///|/
+ ///|/ PrusaSlicer is released under the terms of the AGPLv3 or higher
+ ///|/
++#include <boost/nowide/fstream.hpp>
++#include <iomanip>
++#include <locale>
++
+ #include "Config.hpp"
+ #include "Geometry/Circle.hpp"
+ #include "libslic3r.h"
+@@ -659,6 +662,36 @@
+     m_processor.finalize(true);
+ //    DoExport::update_print_estimated_times_stats(m_processor, print->m_print_statistics);
+     DoExport::update_print_estimated_stats(m_processor, m_writer.extruders(), print->m_print_statistics);
++    // AM Pilot: emit native preview statistics without changing the G-code.
++    // The headless worker reads this bounded sidecar; no GUI or post-process script.
++    {
++        const auto &native = m_processor.get_result();
++        std::array<double, static_cast<size_t>(GCodeExtrusionRole::Count)> role_times {};
++        std::array<double, static_cast<size_t>(EMoveType::Count)> move_times {};
++        for (const auto &move : native.moves) {
++            move_times.at(static_cast<size_t>(move.type)) += move.time[0];
++            if (move.type == EMoveType::Extrude)
++                role_times.at(static_cast<size_t>(move.extrusion_role)) += move.time[0];
++        }
++        boost::nowide::ofstream statistics(std::string(path) + ".am-pilot-statistics.json", std::ios::out | std::ios::trunc);
++        statistics.imbue(std::locale::classic());
++        statistics << std::setprecision(17)
++                   << "{\"schemaVersion\":1,\"engine\":\"PrusaSlicer-2.9.3\",\"totalTimeSeconds\":"
++                   << native.print_statistics.modes[0].time << ",\"roles\":[";
++        for (size_t role = 0; role < role_times.size(); ++role) {
++            const auto usage = native.print_statistics.used_filaments_per_role.find(static_cast<GCodeExtrusionRole>(role));
++            statistics << (role ? "," : "") << "[" << role << "," << role_times[role] << ","
++                       << (usage == native.print_statistics.used_filaments_per_role.end() ? 0.0 : usage->second.first) << ","
++                       << (usage == native.print_statistics.used_filaments_per_role.end() ? 0.0 : usage->second.second) << "]";
++        }
++        statistics << "],\"moves\":[";
++        for (size_t move = 0; move < move_times.size(); ++move)
++            statistics << (move ? "," : "") << "[" << move << "," << move_times[move] << "]";
++        statistics << "]}";
++        statistics.close();
++        if (!statistics)
++            throw Slic3r::RuntimeError("Could not write native preview statistics.");
++    }
+     if (result != nullptr) {
+         *result = std::move(m_processor.extract_result());
+         // set the filename to the correct value

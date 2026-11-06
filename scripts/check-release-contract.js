@@ -36,10 +36,11 @@ assert.match(dockerfile, /LD_LIBRARY_PATH=\/opt\/prusa\/lib \\/);
 assert.match(dockerfile, /RUN ldd \/opt\/prusa\/bin\/prusa-slicer/);
 assert.match(dockerfile, /node:22\.23\.4-bookworm-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da/);
 assert.match(dockerfile, /ARG DEBIAN_BUILD_SNAPSHOT=20250811T000000Z/);
-assert.match(dockerfile, /ARG DEBIAN_RUNTIME_SNAPSHOT=20260904T094338Z/);
-assert.match(dockerfile, /libpcre2-8-0=10\.42-1\+deb12u1/);
+assert.match(dockerfile, /ARG DEBIAN_RUNTIME_SNAPSHOT=20261105T000000Z/);
+assert.doesNotMatch(dockerfile, /--allow-downgrades/);
+assert.match(dockerfile, /libpcre2-8-0=10\.42-1\+deb12u2/);
 assert.match(dockerfile, /libgnutls30=3\.7\.9-2\+deb12u7/);
-assert.match(dockerfile, /libpng16-16=1\.6\.39-2\+deb12u5/);
+assert.match(dockerfile, /libpng16-16=1\.6\.39-2\+deb12u6/);
 assert.match(dockerfile, /rm -rf \/usr\/local\/lib\/node_modules \/opt\/yarn-v1\.22\.22/);
 assert.match(dockerfile, /test ! -e \/usr\/local\/lib\/node_modules\/npm/);
 assert.match(dockerfile, /USER node\nRUN node --input-type=module --eval/);
@@ -49,6 +50,7 @@ assert.match(dockerfile, new RegExp(GMP_SOURCE_SHA256));
 assert.match(sourceBundle, new RegExp(`gmp_version='${GMP_VERSION.replaceAll('.', '\\.')}'`));
 assert.match(sourceBundle, new RegExp(GMP_SOURCE_SHA256));
 assert.match(sourceBundle, /\.\/\*\.tar\.bz2/);
+assert.match(release, /if: github\.event_name == 'workflow_dispatch'[\s\S]+native\/prusa\/qualify-statistics\.sh/);
 assert.match(release, /provenance: mode=max/);
 assert.match(release, /sbom: true/);
 assert.match(release, /cosign sign --yes/);
@@ -151,3 +153,15 @@ assert(bambuRelease.indexOf('Publish qualified rolling alias') > bambuRelease.in
 
 assert.match(sharedRuntime, /libbrotli1\)" = '1\.1\.0-2ubuntu0\.1'/);
 assert.match(sharedEvidence, /runtimeBaseImage='ghcr\.io\/info380\/am-pilot-slicer-core-bambu@sha256:3545ba6ac6accb118628c3e83e82d25400e525d80dda9e1de35fe8e353840385'/);
+
+const prusaNativePlan=JSON.parse(fs.readFileSync(new URL('../native/prusa/runtime-plan.json',import.meta.url),'utf8'));
+assert.equal(prusaNativePlan.standaloneRuntimeIncluded,false);
+assert.deepEqual(prusaNativePlan.reusedPaths,['/opt/prusa']);
+assert(sharedRuntime.includes('ARG VERIFIED_PRUSA_NATIVE_IMAGE='+prusaNativePlan.image));
+assert.match(sharedRuntime,/FROM \$\{VERIFIED_PRUSA_NATIVE_IMAGE\} AS prusa-native/);
+assert.doesNotMatch(sharedRuntime,/FROM \$\{VERIFIED_PRUSA_NATIVE_IMAGE\} AS runtime/);
+assert.match(sharedRuntime,/COPY --from=prusa-native \/opt\/prusa \/opt\/prusa/);
+assert.match(sharedRuntime,/p.binarySha256/);
+assert.match(bambuRelease,/retain-native-component\.mjs/);
+assert.match(bambuRelease,/release-evidence\/prusa-native-\*/);
+assert.match(dockerfile,/dpkg --purge apt libapt-pkg6\.0/);

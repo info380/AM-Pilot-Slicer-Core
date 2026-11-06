@@ -6,6 +6,7 @@ import { createReadStream } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { readGcodeLineBatches } from './gcode-lines.js';
+import { nativeFeatureCatalog } from './native-feature-statistics.js';
 
 import { PRODUCTION_TOOLPATH_CONTENT_TYPE } from './constants.js';
 import { WorkerError } from './errors.js';
@@ -25,7 +26,8 @@ const MOVE_KINDS = Object.freeze([
   Object.freeze({ id: 0, key: 'travel', displayName: 'Travel' }),
   Object.freeze({ id: 1, key: 'extrusion', displayName: 'Extrusion' }),
   Object.freeze({ id: 2, key: 'retraction', displayName: 'Retraction' }),
-  Object.freeze({ id: 3, key: 'unretraction', displayName: 'Unretraction' })
+  Object.freeze({ id: 3, key: 'unretraction', displayName: 'Unretraction' }),
+  Object.freeze({ id: 4, key: 'wipe', displayName: 'Wipe' })
 ]);
 
 const FEATURES = Object.freeze([
@@ -46,14 +48,17 @@ const FEATURES = Object.freeze([
   Object.freeze({ id: 14, key: 'ironing', displayName: 'Ironing' }),
   Object.freeze({ id: 15, key: 'support_ironing', displayName: 'Support ironing' }),
   Object.freeze({ id: 16, key: 'floating_vertical_shell', displayName: 'Floating vertical shell' }),
-  Object.freeze({ id: 17, key: 'support_transition', displayName: 'Support transition' })
+  Object.freeze({ id: 17, key: 'support_transition', displayName: 'Support transition' }),
+  Object.freeze({ id: 18, key: 'bottom_surface', displayName: 'Bottom surface' }),
+  Object.freeze({ id: 19, key: 'brim', displayName: 'Brim' }),
+  Object.freeze({ id: 20, key: 'flush', displayName: 'Flush' })
 ]);
 
 const FEATURE_BY_COMMENT = new Map([
   ['perimeter', 1],
   ['inner wall', 1], ['outer wall', 2], ['overhang wall', 3],
-  ['sparse infill', 4], ['internal solid infill', 5], ['bottom surface', 5], ['top surface', 6],
-  ['bridge', 7], ['brim', 10], ['skirt', 10], ['prime tower', 12],
+  ['sparse infill', 4], ['internal solid infill', 5], ['bottom surface', 18], ['top surface', 6],
+  ['bridge', 7], ['brim', 19], ['skirt', 10], ['prime tower', 12], ['flush', 20],
   ['external perimeter', 2],
   ['overhang perimeter', 3],
   ['internal infill', 4],
@@ -67,6 +72,7 @@ const FEATURE_BY_COMMENT = new Map([
   ['skirt/brim', 10],
   ['skirt / brim', 10],
   ['gap fill', 11],
+  ['gap infill', 11],
   ['wipe tower', 12],
   ['custom', 13],
   ['ironing', 14],
@@ -179,6 +185,7 @@ export const compileProductionToolpath = async ({
   gcodeArtifact,
   sliceEvidenceChecksumSha256,
   summary,
+  nativeStatistics = null,
   warnings = [],
   maximumBytes
 } = {}) => {
@@ -213,6 +220,7 @@ export const compileProductionToolpath = async ({
   const layerTimeRange = createRange();
   const moveRecordCounts = Object.fromEntries(MOVE_KINDS.map(entry => [entry.key, 0]));
   const featureRecordCounts = Object.fromEntries(FEATURES.map(entry => [entry.key, 0]));
+  const featureFilamentMm = new Map();
   const tools = new Set([0]);
   let recordCount = 0;
   let chunkRecordCount = 0;
@@ -223,6 +231,7 @@ export const compileProductionToolpath = async ({
   let currentFeature = 0;
   let currentWidthMm = null;
   let currentHeightMm = null;
+  let wiping = false;
   let coordinatesAbsolute = true;
   let extrusionAbsolute = true;
   let activeTool = 0;
@@ -321,6 +330,8 @@ export const compileProductionToolpath = async ({
       }
       if (bambu && /^;\s*SKIPPABLE_END\b/.test(rawLine)) { skippedBambuBlock = false; continue; }
       if (skippedBambuBlock) continue;
+      if (/^;\s*WIPE_START\b/i.test(rawLine)) { wiping = true; continue; }
+      if (/^;\s*WIPE_END\b/i.test(rawLine)) { wiping = false; continue; }
       let match = rawLine.match(bambu ? /^;\s*CHANGE_LAYER\b/i : /^;\s*LAYER_CHANGE\b/i);
       if (match) {
         finalizeLayer();
@@ -349,6 +360,8 @@ export const compileProductionToolpath = async ({
       match = rawLine.match(bambu ? /^;\s*FEATURE:\s*(.+?)\s*$/i : /^;\s*TYPE:\s*(.+?)\s*$/i);
       if (match) {
         currentFeature = featureFromComment(match[1]);
+        // Native Bambu's viewer groups this role with internal solid infill.
+        if (bambu && currentFeature === 16) currentFeature = 5;
         if (bambu && currentFeature === 13 && currentLayer) { finalizeLayer(); currentLayer = null; }
         continue;
       }
@@ -460,7 +473,7 @@ export const compileProductionToolpath = async ({
         throw toolpathError(`G-code line ${lineNumber} moves without a positive feed rate.`);
       }
       const durationSeconds = hasMotion ? distanceMm / speedMmPerS : 0;
-      const moveKind = hasMotion ? (hasExtrusion ? 1 : 0) : (hasRetraction ? 2 : 3);
+      const moveKind = hasMotion ? (wiping ? 4 : hasExtrusion ? 1 : 0) : (hasRetraction ? 2 : 3);
       const widthMm = moveKind === 1 ? Number(currentWidthMm) : 0;
       const heightMm = moveKind === 1 ? Number(currentHeightMm) : 0;
       if (moveKind === 1 && (!Number.isFinite(widthMm) || widthMm <= 0 || !Number.isFinite(heightMm) || heightMm <= 0)) {
@@ -469,6 +482,7 @@ export const compileProductionToolpath = async ({
       const volumetricFlowMm3PerS = moveKind === 1 && durationSeconds > 0
         ? (extrusionDelta * filamentAreaMm2) / durationSeconds
         : 0;
+      if (moveKind === 1) featureFilamentMm.set(currentFeature, (featureFilamentMm.get(currentFeature) || 0) + extrusionDelta);
       const pendingWrite = appendRecord({
         start,
         end,
@@ -527,7 +541,7 @@ export const compileProductionToolpath = async ({
     chunks: Object.freeze(chunks),
     catalogs: Object.freeze({
       moveKinds: MOVE_KINDS,
-      features: FEATURES,
+      features: Object.freeze(nativeFeatureCatalog(FEATURES, bambu)),
       tools: Object.freeze([...tools].sort((a, b) => a - b).map(id => Object.freeze({
         id,
         key: `tool_${id}`,
@@ -541,7 +555,17 @@ export const compileProductionToolpath = async ({
         layerTimeSeconds: freezeRange(layerTimeRange)
       }),
       moveRecordCounts: Object.freeze(moveRecordCounts),
-      featureRecordCounts: Object.freeze(featureRecordCounts)
+      featureRecordCounts: Object.freeze(featureRecordCounts),
+      ...(nativeStatistics ? {native: {
+        ...nativeStatistics,
+        rows: nativeStatistics.rows.map(row => {
+          if (!bambu || row.featureId == null) return row;
+          const filamentLengthMm = featureFilamentMm.get(row.featureId);
+          if (filamentLengthMm == null) return row;
+          const density = firstPositiveConfigNumber(effectiveConfiguration.bambuConfig.filament.filament_density, 'Filament density');
+          return {...row,filamentLengthMm,filamentMassG:filamentLengthMm*filamentAreaMm2*density/1000};
+        })
+      }} : {})
     }),
     summary: Object.freeze({ ...summary }),
     warnings: Object.freeze([...warnings])

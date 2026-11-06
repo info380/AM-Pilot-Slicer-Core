@@ -1,6 +1,7 @@
 import {verifyBambuRuntimeSettings} from './bambu-configuration-validation.js';
 import {classifyBambuDiagnostics} from './bambu-diagnostics.js';
 import { profileExecutionPhase } from './execution-profile.js';
+import { readNativeStatistics } from './native-feature-statistics.js';
 import {layerGcodeBlock} from './layer-gcode.js';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -180,5 +181,5 @@ export const runBambuEngine = async ({ plateInputPaths, effectiveConfiguration, 
   const inspection = await phase('gcodeInspection', () => inspectGcode(gcodePath, config.maximumGcodeBytes));
   const classified=classifyBambuDiagnostics(processResult,{engineVersion:BAMBU_STUDIO_VERSION,singleFilament:true,primeTowerDisabled:inspected.primeTowerDisabled});
   return { nativeConfigurationEvidence:inspected.settingsValidation,engineDiagnostics:classified.diagnostics, gcodePath, archivePath, artifact: inspection.artifact, archiveArtifact: inspected.archiveArtifact,
-    metrics: inspection.metrics, warnings: classified.warnings };
+    metrics: inspection.metrics, nativeStatistics: await readNativeStatistics(path.join(workDir,'result.json'), true), warnings: classified.warnings };
 };

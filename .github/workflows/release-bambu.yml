@@ -37,6 +37,23 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash native/bambu/fetch-runtime.sh "$RUNNER_TEMP/bambu-runtime-download" native/bambu/runtime
+      - name: Authenticate to GHCR
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Configure Buildx
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
+      - name: Retain the exact tested Prusa native component evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node native/prusa/retain-native-component.mjs "$RUNNER_TEMP/prusa-native-evidence"
+          mkdir -p release-evidence
+          cp "$RUNNER_TEMP/prusa-native-evidence/"* release-evidence/
       - name: Review reduced native media dependencies against current advisories
         run: |
           mkdir -p release-evidence
@@ -47,14 +64,6 @@ jobs:
             --data 'isVulnerable' 'https://services.nvd.nist.gov/rest/json/cves/2.0' \
             --output release-evidence/native-media-advisories.json
           node native/bambu/review-media-security.mjs native/bambu/runtime release-evidence/native-media-advisories.json release-evidence/native-media-security-review.json
-      - name: Authenticate to GHCR
-        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Configure Buildx
-        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
       - name: Build release metadata
         id: metadata
         uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f # v5.8.0
@@ -76,8 +85,6 @@ jobs:
           labels: ${{ steps.metadata.outputs.labels }}
           provenance: mode=max
           sbom: true
-      - name: Install Cosign
-        uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
       - name: Sign immutable image digest
         env:
           IMAGE: ${{ steps.image.outputs.name }}
@@ -192,6 +199,7 @@ jobs:
             release-evidence/sbom.spdx.json \
             release-evidence/signature-verification.json \
             release-evidence/trivy-results.sarif \
+            release-evidence/prusa-native-* \
             > release-evidence/EVIDENCE_SHA256SUMS
       - name: Upload corresponding source and release evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

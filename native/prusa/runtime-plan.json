@@ -1,0 +1,21 @@
+{
+  "schema": "am-pilot-prusa-native-statistics-component",
+  "version": 1,
+  "repository": "info380/AM-Pilot-Slicer-Core",
+  "repositoryId": 1355195265,
+  "sourceRevision": "0f1554bca3730c3ade5013ce6635e29889722a2d",
+  "buildRunId": 42281667636,
+  "jobId": 128111941981,
+  "image": "ghcr.io/info380/am-pilot-slicer-core@sha256:dc27911eba78c783330e5d2216c0e5a53ebc8519e88217c5796d148e11a6ea11",
+  "binarySha256": "bacea11647b1afb82742d0f4d50ad2266185792df365dcb6fdd6976f49ab57b8",
+  "patchSha256": "4e8a2225ec8c38d92ec79a99c001d8106bd4b89e8a37a303d2d7d1162a7c66ca",
+  "reusedPaths": [
+    "/opt/prusa"
+  ],
+  "standaloneRuntimeIncluded": false,
+  "standaloneRuntimeScan": "failure",
+  "standaloneScanId": 2115192553,
+  "jobLogSha256": "233a73a0d135f56b169dbb5b5aaa0a4d3a82e240710513689e815130934986c4",
+  "sourceArchiveSha256": "a2c939316b0cc37a28e03c70fb06549e34c8bd8571fe7e41762804b58d8f9f28",
+  "standaloneScanSha256": "b69315c3053a64724b3e2970f1a3b5b324acd0d96e154aae8838e1eca8cc3f27"
+}
