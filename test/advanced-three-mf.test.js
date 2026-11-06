@@ -76,6 +76,7 @@ for(const bambu of [false,true].filter(bambu=>!process.env.FDM_ADVANCED_ENGINE |
   const machine=(await resolveBambuPreset({resourceRoot:resources,kind:'machine',name:'Bambu Lab A1 0.4 nozzle'})).settings;
   const processPreset=(await resolveBambuPreset({resourceRoot:resources,kind:'process',name:machine.default_print_profile})).settings;
   const filament=(await resolveBambuPreset({resourceRoot:resources,kind:'filament',name:'Generic PLA @BBL A1'})).settings;
+  machine.nozzle_volume_type=[...machine.default_nozzle_volume_type];filament.filament_colour=['#AABBCC'];
   Object.assign(processPreset,{curr_bed_type:'Textured PEI Plate',sparse_infill_density:'15%',sparse_infill_pattern:'grid',top_shell_layers:'0',bottom_shell_layers:'0'});
   effectiveConfiguration={engineAdapter:BAMBU_ENGINE_KEY,bambuConfig:{version:1,machine,process:processPreset,filament}};
   const motionOverrides={machine_max_acceleration_travel:13000};machine.machine_max_acceleration_travel[0]='13000';effectiveConfiguration.ownership={machine:{motionOverrides}};
@@ -187,6 +188,7 @@ test('real Bambu native instances preserve every placement, scale and independen
  const machine=(await resolveBambuPreset({resourceRoot:resources,kind:'machine',name:'Bambu Lab A1 0.4 nozzle'})).settings;
  const processPreset=(await resolveBambuPreset({resourceRoot:resources,kind:'process',name:machine.default_print_profile})).settings;
  const filament=(await resolveBambuPreset({resourceRoot:resources,kind:'filament',name:'Generic PLA @BBL A1'})).settings;
+  machine.nozzle_volume_type=[...machine.default_nozzle_volume_type];filament.filament_colour=['#AABBCC'];
  Object.assign(processPreset,{curr_bed_type:'Textured PEI Plate',sparse_infill_density:'15%',sparse_infill_pattern:'grid',top_shell_layers:'0',bottom_shell_layers:'0'});
  const effectiveConfiguration={engineAdapter:BAMBU_ENGINE_KEY,bambuConfig:{version:1,machine,process:processPreset,filament}};
  const args=argumentsFor(true,[modifier],[]);
@@ -196,7 +198,7 @@ test('real Bambu native instances preserve every placement, scale and independen
   return {source,object:{name:'Cube',definitionId:i===3?'detached':'linked',modifiers:[{...modifier,printOverrides:{fill_density:i===3?0:100}}]},objectTransform:buildPlateObjectTransform({transform:pose,coordinateMapping:{projectOrigin:'center',engineBedOrigin:'front_left',translationMm:{x:0,y:0,z:0}}})};
  });
  const platePath=path.join(workDir,'plate.3mf');await fs.writeFile(platePath,buildAdvancedPlate3mf(args));
- const result=await runBambuEngine({plateInputPaths:[platePath],effectiveConfiguration,workDir,config:{bambuStudioCommand:bambuCommand,jobTimeoutMs:120000,maximumLogBytes:262144,maximumArchiveBytes:16777216,maximumExpandedArchiveBytes:33554432,maximumGcodeBytes:16777216,engineThreads:1,engineCpuAffinity:process.env.SLICER_TEST_CPU_AFFINITY||'none'}});
+ const result=await runBambuEngine({plateInputPaths:[platePath],effectiveConfiguration,workDir,config:{bambuStudioCommand:bambuCommand,maximumPlateInputBytes:16777216,jobTimeoutMs:120000,maximumLogBytes:262144,maximumArchiveBytes:16777216,maximumExpandedArchiveBytes:33554432,maximumGcodeBytes:16777216,engineThreads:1,engineCpuAffinity:process.env.SLICER_TEST_CPU_AFFINITY||'none'}});
  const gcode=await fs.readFile(result.gcodePath,'utf8');
  const layers=gcode.split(/; CHANGE_LAYER\n/),low=layers.find(layer=>/; Z_HEIGHT: 1.2\n/.test(layer));
  assert.ok(low,'expected lower layer exists');

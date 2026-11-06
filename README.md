@@ -381,3 +381,11 @@ an exact signed image without changing runtime code or production configuration.
 It separates CPU quota from each engine's execution policy and retains output,
 CPU, memory and observed-thread evidence. No automatic benchmark or deployment
 is added.
+
+### Reviewed native Bambu handoff
+
+AM Pilot remains the authority for printer, process, material and colour presets. The Bambu worker requires an explicit single-nozzle volume type and filament colour in the immutable effective configuration. It loads the same frozen machine/process files through the supported compatibility-settings argument; no ambient vendor `machine_full`/`process_full` lookup or network preset refresh is needed. Every input becomes an engine-generated native project with preserved model/modifier/event entries and explicit nozzle/colour metadata before slicing. The worker never forges the project generator or substitutes missing settings.
+
+`schemas/bambu-serialization-2.8.2.61.json` pins the output serializer's scalar-variant/percentage forms, nullable unset overrides and retired metadata to the declared upstream source revision and PrintConfig.cpp checksum. Every active requested setting must match the exported archive, including scripts; unknown missing or changed fields reject the output. The enumerated retired keys are absent from this pinned runtime's active configuration definitions. The one-external-spool invocation has no prime tower. Exact version/tower/colour notices remain as private run-correlated informational diagnostics; repairs and unknown warnings retain warning severity. A verified-field count is logged without exposing configuration values.
+
+Deploy the snapshot-producing API first and drain pre-update queued work before activating this worker. Completed historical run snapshots are immutable. The native engine and CPU plan do not change for this handoff update.
