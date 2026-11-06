@@ -12,6 +12,11 @@ PrusaSlicer is based on Slic3r by Alessandro Ranellucci and the RepRap
 community. Its dependency build definitions contain the exact upstream URLs,
 versions, patches, and checksums used by the pinned build.
 
+AM Pilot's `native/prusa/native-statistics.patch` adds a separate JSON report of
+the native processor's normal-mode feature times and filament consumption.
+The patch is included in the corresponding-source archive and its checksum is
+recorded in release evidence. It does not change generated G-code commands.
+
 ## GNU MP 6.2.1
 
 - Project: <https://gmplib.org/>

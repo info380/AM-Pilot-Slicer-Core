@@ -1,4 +1,5 @@
 import { profileExecutionPhase } from './execution-profile.js';
+import { readNativeStatistics } from './native-feature-statistics.js';
 import {layerGcodeBlock} from './layer-gcode.js';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -174,5 +175,5 @@ export const runBambuEngine = async ({ plateInputPaths, effectiveConfiguration, 
   });
   const inspection = await phase('gcodeInspection', () => inspectGcode(gcodePath, config.maximumGcodeBytes));
   return { gcodePath, archivePath, artifact: inspection.artifact, archiveArtifact: inspected.archiveArtifact,
-    metrics: inspection.metrics, warnings: extractWarnings(processResult) };
+    metrics: inspection.metrics, nativeStatistics: await readNativeStatistics(path.join(workDir,'result.json'), true), warnings: extractWarnings(processResult) };
 };

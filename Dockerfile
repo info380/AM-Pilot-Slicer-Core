@@ -68,6 +68,9 @@ RUN mkdir -p deps/.pkg_cache/GMP \
 RUN cmake --preset no-occt -S deps \
     && cmake --build deps/build-no-occt --parallel 2
 
+COPY native/prusa/native-statistics.patch /tmp/native-statistics.patch
+RUN git apply --check /tmp/native-statistics.patch && git apply /tmp/native-statistics.patch
+
 RUN cmake -S . -B build -G Ninja \
       -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_INSTALL_PREFIX=/opt/prusa \

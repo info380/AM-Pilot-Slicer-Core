@@ -1,4 +1,5 @@
 import { profileExecutionPhase } from './execution-profile.js';
+import { readNativeStatistics } from './native-feature-statistics.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -83,6 +84,7 @@ export const runSlicerEngine = async ({
   return Object.freeze({
     gcodePath,
     artifact: inspection.artifact,
+    nativeStatistics: await readNativeStatistics(`${gcodePath}.am-pilot-statistics.json`, false),
     metrics: inspection.metrics,
     warnings: extractWarnings(result)
   });

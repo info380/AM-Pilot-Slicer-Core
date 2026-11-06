@@ -346,6 +346,7 @@ try {
       gcodeArtifact: result.artifact,
       sliceEvidenceChecksumSha256,
       summary: result.metrics,
+      nativeStatistics: result.nativeStatistics,
       warnings: result.warnings,
       maximumBytes: engineConfig.maximumToolpathPreviewBytes
     });
