@@ -28,6 +28,11 @@ The Bambu image and Prusa image have separate immutable digests and evidence.
 Source-built Bambu releases additionally retain the exact native builder source,
 compiled build archive, FFmpeg source, patch and native build/checksum evidence.
 The release's native runtime plan identifies all of these immutable inputs.
+Shared releases with native Prusa statistics additionally retain the exact
+Prusa component builder source, checksum-locked component plan, signed image
+provenance and stock/patched G-code comparison log. The plan identifies the
+copied native binary; the standalone builder runtime is excluded. The final
+shared runtime has its own scan, signature, SBOM and native integration proof.
 
 Diagnostic source-built Bambu prototypes are separate from OCI releases. Their
 exact source, patches and build definitions are identified in

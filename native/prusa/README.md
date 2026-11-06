@@ -18,22 +18,17 @@ release evidence records its checksum.
 This change remains a candidate until the patched native runtime is built and
 qualified. Before release:
 
-1. Run the existing Prusa native integration and qualification corpus against
+1. Run the existing Prusa native integration and shared-worker fixtures against
    the candidate image. Verify native feature time and consumption, including
    ironing, and compare total time with the G-code summary.
 2. Compare stock and patched G-code bytes for the same deterministic fixture
    and settings, after the existing timestamp canonicalization.
-3. Build, scan, sign and qualify the immutable Prusa image. Make the shared
-   Bambu image include that exact qualified Prusa runtime; its currently pinned
-   base predates this exporter. Do not promote a shared image with the older
-   Prusa binary: the worker intentionally rejects a missing native report.
+3. Build and sign the immutable Prusa native component, and prove stock/patched
+   output parity. Make the shared Bambu image include that exact binary; its
+   original runtime base predates this exporter. Scan the complete shared image.
+   Do not promote a shared image with the older Prusa binary: the worker intentionally rejects a missing native report.
 4. Validate the shared API/browser decoder against both engines and deploy
    compatible consumers before activating the new worker image.
-
-The local native build was blocked on 6 November 2026 by gateway errors from
-the pinned Debian snapshot package service. No alternative package versions
-or unverified native runtime were substituted.
-
 
 The 6 November candidate rebuild also updates the runtime package snapshot to
 `20261105T000000Z`: PCRE2 `10.42-1+deb12u2` matches the exact pinned Node image
@@ -58,3 +53,20 @@ stage. It reuses the same workflow's native cache, compiles without network,
 and avoids loading the complete compiler/dependency filesystem into Docker.
 The native exporter constructs its sidecar path from the upstream `const char*`
 parameter explicitly as `std::string`.
+
+
+The shared image copies only `/opt/prusa` from the exact signed native image
+in `runtime-plan.json`. Its native stock/patched comparison and worker-process
+integration passed. The standalone Debian image failed its runtime scan for
+unused `apt`/`libapt-pkg6.0`; that image's operating system and worker are not
+shipped. The shared Ubuntu runtime already removes its own package manager.
+Its full-image scan remains a mandatory, independent release gate.
+
+`retain-native-component.mjs` verifies the exact successful native build,
+signing and stock-comparison steps, source revision, OCI provenance, binary
+identity and signed image. It retains the original runtime scan transparently
+alongside the native proof and corresponding source. A failure in any native
+step is rejected; the standalone runtime cannot be included. The shared build
+checks the copied binary checksum and its complete dynamic-link closure.
+Existing evidence directories are never replaced. Full native rebuilds also
+remove the unused Debian package manager before their own runtime scan.

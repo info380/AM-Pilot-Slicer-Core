@@ -144,6 +144,7 @@ RUN printf '%s\n' \
       libpcre2-8-0=10.42-1+deb12u2 \
       libpng16-16=1.6.39-2+deb12u6 \
     && rm -rf /var/lib/apt/lists/* \
+    && dpkg --purge apt libapt-pkg6.0 \
     && test -d /usr/local/lib/node_modules/npm \
     && test -d /opt/yarn-v1.22.22 \
     && rm -rf /usr/local/lib/node_modules /opt/yarn-v1.22.22 \

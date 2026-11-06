@@ -153,3 +153,15 @@ assert(bambuRelease.indexOf('Publish qualified rolling alias') > bambuRelease.in
 
 assert.match(sharedRuntime, /libbrotli1\)" = '1\.1\.0-2ubuntu0\.1'/);
 assert.match(sharedEvidence, /runtimeBaseImage='ghcr\.io\/info380\/am-pilot-slicer-core-bambu@sha256:3545ba6ac6accb118628c3e83e82d25400e525d80dda9e1de35fe8e353840385'/);
+
+const prusaNativePlan=JSON.parse(fs.readFileSync(new URL('../native/prusa/runtime-plan.json',import.meta.url),'utf8'));
+assert.equal(prusaNativePlan.standaloneRuntimeIncluded,false);
+assert.deepEqual(prusaNativePlan.reusedPaths,['/opt/prusa']);
+assert(sharedRuntime.includes('ARG VERIFIED_PRUSA_NATIVE_IMAGE='+prusaNativePlan.image));
+assert.match(sharedRuntime,/FROM \$\{VERIFIED_PRUSA_NATIVE_IMAGE\} AS prusa-native/);
+assert.doesNotMatch(sharedRuntime,/FROM \$\{VERIFIED_PRUSA_NATIVE_IMAGE\} AS runtime/);
+assert.match(sharedRuntime,/COPY --from=prusa-native \/opt\/prusa \/opt\/prusa/);
+assert.match(sharedRuntime,/p.binarySha256/);
+assert.match(bambuRelease,/retain-native-component\.mjs/);
+assert.match(bambuRelease,/release-evidence\/prusa-native-\*/);
+assert.match(dockerfile,/dpkg --purge apt libapt-pkg6\.0/);

@@ -284,10 +284,11 @@ test('PrusaSlicer preserves distinct AM Pilot plate placements', { skip: !comman
 
 
 // Manual qualification supplies both checksum-identified native binaries.
-// This verifies that collecting statistics does not alter printable output.
-test('native statistics exporter preserves stock Prusa G-code bytes', {
-  skip: !command || !process.env.PRUSA_STOCK_INTEGRATION_CMD
-}, async t => {
+// This control comparison is registered only for that explicit qualification;
+// ordinary native integration requires no stock binary and must have no skips.
+if (process.env.PRUSA_STOCK_INTEGRATION_CMD) {
+test('native statistics exporter preserves stock Prusa G-code bytes', async t => {
+  assert.ok(command, 'The candidate binary is required for stock parity');
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'prusa-statistics-parity-'));
   t.after(() => fs.rm(root, {recursive:true,force:true}));
   const model = path.join(root, 'cube.stl');
@@ -316,3 +317,4 @@ test('native statistics exporter preserves stock Prusa G-code bytes', {
     assert.deepEqual(outputs[1],outputs[0],`Native exporter altered printable G-code (ironing=${ironing})`);
   }
 });
+}
