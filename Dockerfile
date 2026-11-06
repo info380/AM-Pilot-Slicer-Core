@@ -95,6 +95,18 @@ RUN cmake -S . -B build -G Ninja \
     && LD_LIBRARY_PATH=/opt/prusa/lib /opt/prusa/bin/prusa-slicer --help \
       | grep -F '2.9.3'
 
+# Manual statistics qualification reverses only the exporter with the same
+# cached compiler/dependencies. Export one binary instead of loading the full
+# compiler filesystem into Docker. Ordinary runtime builds skip these stages.
+FROM prusa-build AS prusa-statistics-control-build
+RUN --network=none cd /src \
+    && git apply --reverse --check /tmp/native-statistics.patch \
+    && git apply --reverse /tmp/native-statistics.patch \
+    && cmake --build build --parallel 2 --target PrusaSlicer \
+    && test -x build/src/prusa-slicer
+FROM scratch AS prusa-statistics-control
+COPY --from=prusa-statistics-control-build /src/build/src/prusa-slicer /prusa-slicer-stock
+
 FROM ${NODE_RUNTIME_IMAGE} AS worker-dependencies
 WORKDIR /worker
 COPY package.json package-lock.json ./

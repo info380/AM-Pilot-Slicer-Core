@@ -26,7 +26,7 @@
 +            if (move.type == EMoveType::Extrude)
 +                role_times.at(static_cast<size_t>(move.extrusion_role)) += move.time[0];
 +        }
-+        boost::nowide::ofstream statistics(path + ".am-pilot-statistics.json", std::ios::out | std::ios::trunc);
++        boost::nowide::ofstream statistics(std::string(path) + ".am-pilot-statistics.json", std::ios::out | std::ios::trunc);
 +        statistics.imbue(std::locale::classic());
 +        statistics << std::setprecision(17)
 +                   << "{\"schemaVersion\":1,\"engine\":\"PrusaSlicer-2.9.3\",\"totalTimeSeconds\":"

@@ -8,27 +8,13 @@ readonly run_key="${GITHUB_RUN_ID:?Run through the manual candidate workflow}"
 [[ "$run_key" =~ ^[0-9]+$ ]]
 test "$(git rev-parse HEAD)" = "${GITHUB_SHA:?}"
 mkdir -p "$output"
-readonly builder="am-pilot-prusa-statistics-builder:${run_key}"
-readonly stock_container="am-pilot-prusa-statistics-stock-${run_key}"
 readonly stock_binary="$(realpath "$output")/prusa-slicer-stock"
-cleanup() {
-  docker rm -f "$stock_container" >/dev/null 2>&1 || true
-  docker image rm "$builder" >/dev/null 2>&1 || true
-}
-trap cleanup EXIT
-# Reuse this same workflow's cached dependency/native build. Reverse only the
-# reviewed exporter patch, then rebuild against exactly the same dependencies.
-docker buildx build --platform linux/amd64 --target prusa-build --load --tag "$builder" .
-docker run --name "$stock_container" --network none --cpus 2 --memory 4g --pids-limit 256 \
-  --entrypoint /bin/sh "$builder" -ec '
-    cd /src
-    git apply --reverse --check /tmp/native-statistics.patch
-    git apply --reverse /tmp/native-statistics.patch
-    cmake --build build --parallel 2
-    test -x build/src/prusa-slicer
-  '
-docker cp "$stock_container:/src/build/src/prusa-slicer" "$stock_binary"
-chmod a+rx "$stock_binary"
+trap 'rm -f "$stock_binary"' EXIT
+# Reuse this workflow's native build cache and export only the stock executable.
+# Its control stage has no network and reverses only the reviewed exporter.
+docker buildx build --platform linux/amd64 --target prusa-statistics-control \
+  --output "type=local,dest=${output}" .
+test -x "$stock_binary"
 sha256sum "$stock_binary" > "$output/prusa-stock-binary.SHA256"
 sha256sum native/prusa/native-statistics.patch > "$output/prusa-statistics-patch.SHA256"
 docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
@@ -41,4 +27,3 @@ docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-
   | tee "$output/native-statistics-parity.txt"
 grep -F '# fail 0' "$output/native-statistics-parity.txt"
 grep -F '# skipped 0' "$output/native-statistics-parity.txt"
-rm "$stock_binary"

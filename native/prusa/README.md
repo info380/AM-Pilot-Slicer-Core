@@ -51,3 +51,10 @@ G-code bytes with and without ironing. The worker-process tests also assert
 native timing and role consumption. This step is manual-dispatch-only; automatic
 PR verification and tag-release runtime budgets are not expanded. No candidate
 image is a production engine registration.
+
+
+The control stage exports only its rebuilt stock executable through a scratch
+stage. It reuses the same workflow's native cache, compiles without network,
+and avoids loading the complete compiler/dependency filesystem into Docker.
+The native exporter constructs its sidecar path from the upstream `const char*`
+parameter explicitly as `std::string`.
