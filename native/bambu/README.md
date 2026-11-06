@@ -1,5 +1,21 @@
 # Native seam-visibility prototype
 
+## Zero paint penetration compatibility
+
+The candidate patch also changes only the minimum for
+`top_color_penetration_layers` and `bottom_color_penetration_layers` from 1 to 0.
+The pinned desktop source can serialize zero, but its CLI range validator rejects
+the same value. Negative values and non-integer counts remain invalid. Defaults,
+shell-layer counts and all other option bounds remain unchanged.
+
+This addition requires a new native build and runtime qualification. The old
+`runtime-plan.json` intentionally cannot admit the changed patch. Before updating
+that plan, run the shared application's `zero-paint-layers` native acceptance
+mode across supported machines/nozzles, verify both exported values remain zero,
+and retain the normal default-recipe/native-runtime qualification evidence.
+No API/Admin change may advertise working zero values until the compatible
+worker is qualified and deployed.
+
 This is a diagnostic candidate, not an admitted production runtime. It leaves
 the worker, printer settings, source geometry, modifiers and seam choices intact.
 See [corresponding source and notices](SOURCE.md) for the exact source-built
