@@ -63,6 +63,18 @@ test('Bambu modifier shell thickness is serialized on the volume and validated',
  assert.throws(() => buildAdvancedPlate3mf(argumentsFor(false,[region])), /requires the native Bambu engine/);
  assert.throws(() => buildAdvancedPlate3mf(argumentsFor(true,[{...region,printOverrides:{ensure_vertical_shell_thickness:'off'}}])), /Invalid object print setting/);
 });
+test('Bambu modifier ironing inset is scoped to the volume, including explicit zero', () => {
+ const region = {...modifier, printOverrides:{ironing_inset:0}};
+ const config = textEntries(buildAdvancedPlate3mf(argumentsFor(true,[region])))['Metadata/model_settings.config'];
+ assert.match(config, /<part [^>]*subtype="modifier_part"[^>]*>(?:(?!<\/part>).)*<metadata key="ironing_inset" value="0"\/>/s);
+ assert.throws(() => buildAdvancedPlate3mf(argumentsFor(false,[region])), /requires the native Bambu engine/);
+ for (const ironing_inset of [-.01, 100.01, '0', null]) {
+  assert.throws(() => buildAdvancedPlate3mf(argumentsFor(true,[{...region,printOverrides:{ironing_inset}}])), /Invalid modifier ironing inset/);
+ }
+ const objectInput = argumentsFor(true);
+ objectInput.sources[0].object.printOverrides = {ironing_inset:2};
+ assert.throws(() => buildAdvancedPlate3mf(objectInput), /Invalid object print setting/);
+});
 test('a missing, duplicate, misplaced or above-model pause fails output verification',()=>{
  const pausePoints=[{id:'p',zMm:5.21,message:''}],gcode=';Z:5.2\n;Z:5.4\n;PAUSE_PRINT\nPAUSE\n';
  assert.doesNotThrow(()=>verifyNativePauseEvents({gcode,pausePoints,bambu:false}));
@@ -127,10 +139,37 @@ for(const bambu of [false,true].filter(bambu=>!process.env.FDM_ADVANCED_ENGINE |
   }}];
   await fs.writeFile(platePath,buildAdvancedPlate3mf(args));
   const rich=await(bambu?runBambuEngine:runSlicerEngine)({config,workDir,plateInputPaths:[platePath],effectiveConfiguration,pausePoints:[]});
-  const richCode=await fs.readFile(rich.gcodePath,'utf8');let feature='',x=0,y=0;const ironing=[];
-  for(const line of richCode.split('\n')){const match=line.match(/^;(?: FEATURE: |TYPE:)(.+)/);if(match)feature=match[1];if(!/^G[01] /.test(line))continue;const values=Object.fromEntries([...line.matchAll(/([XYE])([-\d.]+)/g)].map(match=>[match[1],Number(match[2])]));x=values.X??x;y=values.Y??y;if(/ironing/i.test(feature)&&values.E>0&&('X'in values||'Y'in values))ironing.push({x,y});}
+  const ironingPoints = gcode => {
+   let feature = '', x = 0, y = 0;
+   const points = [];
+   for (const line of gcode.split('\n')) {
+    const match = line.match(/^;(?: FEATURE: |TYPE:)(.+)/);
+    if (match) feature = match[1];
+    if (!/^G[01] /.test(line)) continue;
+    const values = Object.fromEntries([...line.matchAll(/([XYE])([-\d.]+)/g)].map(match => [match[1], Number(match[2])]));
+    x = values.X ?? x;
+    y = values.Y ?? y;
+    if (/^ironing$/i.test(feature) && values.E > 0 && ('X' in values || 'Y' in values)) points.push({x,y});
+   }
+   return points;
+  };
+  const ironing = ironingPoints(await fs.readFile(rich.gcodePath,'utf8'));
   assert(ironing.length>10,'The modifier must generate actual native ironing toolpaths');
   assert(ironing.every(point=>point.x<=81.5),'Ironing stays inside the selected left-half modifier');
+  if (bambu) {
+   args.sources[0].object.modifiers[0].printOverrides.ironing_inset = 2;
+   await fs.writeFile(platePath, buildAdvancedPlate3mf(args));
+   const inset = await runBambuEngine({config,workDir,plateInputPaths:[platePath],effectiveConfiguration,pausePoints:[]});
+   const insetPoints = ironingPoints(await fs.readFile(inset.gcodePath, 'utf8'));
+   assert(insetPoints.length > 10, 'Ironing still runs with a 2 mm inset');
+   // Bambu clips against the inset part outline and intersects the result with the region.
+   const bounds = (points, axis) => [Math.min(...points.map(point => point[axis])), Math.max(...points.map(point => point[axis]))];
+   const [left, split] = bounds(ironing, 'x'), [insetLeft, insetSplit] = bounds(insetPoints, 'x');
+   const [front, back] = bounds(ironing, 'y'), [insetFront, insetBack] = bounds(insetPoints, 'y');
+   assert(insetLeft > left + 1 && insetFront > front + 1 && insetBack < back - 1,
+    `The 2 mm inset moves the outside ironing bounds from [${left}, ${front}, ${back}] to [${insetLeft}, ${insetFront}, ${insetBack}]`);
+   assert(Math.abs(insetSplit - split) < .2, 'The internal modifier boundary stays in place');
+  }
  }
 
 });

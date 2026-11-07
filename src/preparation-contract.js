@@ -1,9 +1,10 @@
 import { compileObjectOverrides } from './object-overrides.js';
 import { WorkerError } from './errors.js';
+import bambuPrintSettings from '../schemas/bambu-print-settings-2.8.2.61.json' with { type: 'json' };
 const normalizeSlicerObjectPrintOverrides = value => { compileObjectOverrides(value); return structuredClone(value); };
 
 // Versioned common preparation contract, independent of the selected engine.
-// Only region settings supported by both native engines enter a modifier.
+// Region settings must be supported by the selected native engine.
 export const FDM_PREPARATION_VERSION = 1;
 export const GCODE_SCRIPT_LIMITS = Object.freeze({perScriptCharacters:100000,totalCharacters:500000});
 export const FDM_PREPARATION_LIMITS = Object.freeze({ pausePoints: 128, modifiersPerObject: 32, modifiersPerPlate: 256 });
@@ -14,11 +15,13 @@ export const FDM_MODIFIER_BASE_SETTING_KEYS = Object.freeze([
   'perimeter_speed', 'external_perimeter_speed', 'infill_speed', 'solid_infill_speed', 'top_solid_infill_speed'
 ]);
 export const BAMBU_MODIFIER_SHELL_THICKNESS_KEY = 'ensure_vertical_shell_thickness';
+const bambuIroningInsetField = bambuPrintSettings.fields.find(field => field.key === 'ironing_inset');
+export const BAMBU_MODIFIER_IRONING_INSET_KEY = bambuIroningInsetField.key;
 export const FDM_MODIFIER_SETTING_KEYS = Object.freeze([
   ...FDM_MODIFIER_BASE_SETTING_KEYS, BAMBU_MODIFIER_SHELL_THICKNESS_KEY,
   'top_solid_min_thickness', 'bottom_solid_min_thickness', 'thin_walls', 'overhangs',
   'top_fill_pattern', 'bottom_fill_pattern', 'fill_angle', 'bridge_angle', 'bridge_speed', 'gap_fill_speed',
-  'ironing', 'ironing_type', 'ironing_flowrate', 'ironing_spacing', 'ironing_speed',
+  'ironing', 'ironing_type', 'ironing_flowrate', 'ironing_spacing', 'ironing_speed', BAMBU_MODIFIER_IRONING_INSET_KEY,
   'fuzzy_skin', 'fuzzy_skin_thickness', 'fuzzy_skin_point_dist',
   'perimeter_extrusion_width', 'external_perimeter_extrusion_width', 'infill_extrusion_width',
   'solid_infill_extrusion_width', 'top_infill_extrusion_width', 'infill_overlap', 'bridge_flow_ratio'
@@ -77,7 +80,13 @@ export const normalizeFdmModifiers = value => {
     ids.add(id);
     if (!exact(entry.transform, ['positionMm', 'rotationDeg', 'scale']) || Object.keys(entry.transform).length !== 3) fail('Invalid modifier transform.');
     if (!record(entry.printOverrides) || !Object.keys(entry.printOverrides).length || Object.keys(entry.printOverrides).some(key => !FDM_MODIFIER_SETTING_KEYS.includes(key))) fail('Choose at least one supported modifier setting.');
-    const printOverrides = normalizeSlicerObjectPrintOverrides(entry.printOverrides);
+    const { ironing_inset: ironingInset, ...objectOverrides } = entry.printOverrides;
+    const printOverrides = normalizeSlicerObjectPrintOverrides(objectOverrides);
+    if (Object.hasOwn(entry.printOverrides, BAMBU_MODIFIER_IRONING_INSET_KEY)) {
+      const { min, max } = bambuIroningInsetField;
+      if (!Number.isFinite(ironingInset) || ironingInset < min || ironingInset > max) fail('Invalid modifier ironing inset.');
+      printOverrides.ironing_inset = ironingInset;
+    }
     if (printOverrides.ironing === true && !printOverrides.ironing_type) fail('Choose the surfaces to iron inside this modifier.');
     if (printOverrides.ironing_type && printOverrides.ironing !== true) fail('An ironing surface scope requires ironing to be enabled.');
     if (printOverrides.ironing_flowrate != null && printOverrides.ironing_flowrate > 100) fail('Modifier ironing flow must be between 0 and 100%.');

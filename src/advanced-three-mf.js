@@ -2,7 +2,7 @@ import {layerGcodeBlock} from './layer-gcode.js';
 import {zipSync,strToU8} from 'fflate';
 import {readNormalized3mfXml,CONTENT_TYPES,RELATIONSHIPS} from './three-mf.js';
 import {IDENTITY_3MF_TRANSFORM,parse3mfTransform,multiply3mfTransforms,apply3mfTransform,buildPlateObjectTransform,format3mfTransform} from './transform.js';
-import {BAMBU_MODIFIER_SHELL_THICKNESS_KEY,normalizeFdmModifiers,normalizeFdmPausePoints,normalizeFdmCustomGcodePoints,FDM_PREPARATION_LIMITS} from './preparation-contract.js';
+import {BAMBU_MODIFIER_IRONING_INSET_KEY,BAMBU_MODIFIER_SHELL_THICKNESS_KEY,normalizeFdmModifiers,normalizeFdmPausePoints,normalizeFdmCustomGcodePoints,FDM_PREPARATION_LIMITS} from './preparation-contract.js';
 import {modifierGeometry} from './modifier-geometry.js';
 import {compileObjectOverrides} from './object-overrides.js';
 import {WorkerError} from './errors.js';
@@ -24,6 +24,9 @@ const settingsMetadata=(overrides,bambu,type='volume')=>Object.entries(compileOb
  if(bambu){if(!nativeKeys[key])error('Unsupported Bambu region setting.');if(['fill_pattern','top_fill_pattern','bottom_fill_pattern'].includes(key)){if(!Object.hasOwn(patternMap,value))error('Unsupported Bambu region infill pattern.');value=patternMap[value];}key=nativeKeys[key];}
  return `<metadata${bambu?'':` type="${type}"`} key="${xml(key)}" value="${xml(value)}"/>`;
 }).join('');
+
+const bambuVolumeSettingsMetadata = ({ ironing_inset: ironingInset, ...objectOverrides }) =>
+ settingsMetadata(objectOverrides,true) + (ironingInset === undefined ? '' : `<metadata key="${BAMBU_MODIFIER_IRONING_INSET_KEY}" value="${xml(ironingInset)}"/>`);
 
 // Flatten only the already normalized geometry graph. Never import source profile,
 // script or project metadata. Instance transforms and support-paint attributes stay.
@@ -75,6 +78,9 @@ export const buildAdvancedPlate3mf=({sources,pausePoints=[],customGcodePoints=[]
   if (!bambu && modifiers.some(modifier => Object.hasOwn(modifier.printOverrides, BAMBU_MODIFIER_SHELL_THICKNESS_KEY))) {
     error('Modifier shell thickness requires the native Bambu engine.');
   }
+  if (!bambu && modifiers.some(modifier => Object.hasOwn(modifier.printOverrides, BAMBU_MODIFIER_IRONING_INSET_KEY))) {
+    error('Modifier ironing inset requires the native Bambu engine.');
+  }
   // Only explicit linked instances may share a native model. Verify all frozen
   // source and region evidence too; a definition ID alone is not authority.
   const variant = JSON.stringify({modifiers,overrides:object.printOverrides||{},paint:object.supportPaint||null});
@@ -101,7 +107,7 @@ export const buildAdvancedPlate3mf=({sources,pausePoints=[],customGcodePoints=[]
    const parts=reuse?previous.parts:volumes.map(volume=>({id:nextId++,volume}));
    if(!reuse)for(const part of parts)resources.push(`<object id="${part.id}" type="model">${meshXml(part.volume.geometry,true,Boolean(object.supportPaint?.data))}</object>`);
    resources.push(`<object id="${id}" type="model"><components>${parts.map(part=>`<component objectid="${part.id}"/>`).join('')}</components></object>`);
-   metadata.push(`<object id="${id}"><metadata key="name" value="${xml(object.name)}"/>${settingsMetadata(object.printOverrides||{},true,'object')}${parts.map(({id,volume})=>`<part id="${id}" subtype="${volume.modifier?'modifier_part':'normal_part'}"><metadata key="name" value="${xml(volume.name)}"/>${settingsMetadata(volume.settings,true)}</part>`).join('')}</object>`);
+   metadata.push(`<object id="${id}"><metadata key="name" value="${xml(object.name)}"/>${settingsMetadata(object.printOverrides||{},true,'object')}${parts.map(({id,volume})=>`<part id="${id}" subtype="${volume.modifier?'modifier_part':'normal_part'}"><metadata key="name" value="${xml(volume.name)}"/>${bambuVolumeSettingsMetadata(volume.settings)}</part>`).join('')}</object>`);
    instances.push(`<model_instance><metadata key="object_id" value="${id}"/><metadata key="instance_id" value="0"/></model_instance>`);
    if (object.definitionId && !previous) linked.set(object.definitionId,{source,variant,id,base,parts});
   }else{
