@@ -99,3 +99,13 @@ published build history are retained. The replacement candidate installs the
 same Trivy 0.70.0 binary from its official GitHub release with a pinned SHA-256;
 its HIGH/CRITICAL vulnerability gate and all native-image checks are unchanged.
 No failed tag is moved or reused.
+
+### Printer display thumbnails
+
+The worker renders the plate image from the same parsed model extrusion used by
+AM Pilot Preview. The images populate the native archive's 512 px and 128 px
+cover relationships. Packaging updates the model thumbnail reference, preserves
+the native compressed G-code and other entries, and computes the final archive
+checksum before publishing the toolpath and manifest. The renderer runs without
+a display server or access to a printer. Older published archives keep their
+original checksum and receive images when sliced again.

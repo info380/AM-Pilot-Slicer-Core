@@ -54,6 +54,9 @@ const FEATURES = Object.freeze([
   Object.freeze({ id: 20, key: 'flush', displayName: 'Flush' })
 ]);
 
+const NON_MODEL_THUMBNAIL_FEATURES = new Set(['skirt_brim', 'brim', 'wipe_tower', 'custom', 'flush']);
+const includeThumbnailMove = (move, feature) => move === 1 && !NON_MODEL_THUMBNAIL_FEATURES.has(FEATURES[feature]?.key);
+
 const FEATURE_BY_COMMENT = new Map([
   ['perimeter', 1],
   ['inner wall', 1], ['outer wall', 2], ['overhang wall', 3],
@@ -184,6 +187,7 @@ export const compileProductionToolpath = async ({
   effectiveConfiguration,
   gcodeArtifact,
   sliceEvidenceChecksumSha256,
+  finalizeEvidence,
   summary,
   nativeStatistics = null,
   warnings = [],
@@ -194,7 +198,8 @@ export const compileProductionToolpath = async ({
     || !workDir
     || !run?.id
     || !/^[0-9a-f]{64}$/.test(String(gcodeArtifact?.checksumSha256 || ''))
-    || !/^[0-9a-f]{64}$/.test(String(sliceEvidenceChecksumSha256 || ''))
+    || (finalizeEvidence === undefined ? !/^[0-9a-f]{64}$/.test(String(sliceEvidenceChecksumSha256 || ''))
+      : typeof finalizeEvidence !== 'function' || sliceEvidenceChecksumSha256 !== undefined)
     || !Number.isSafeInteger(maximumBytes)
     || maximumBytes <= PRODUCTION_TOOLPATH_PREFIX_BYTES
   ) throw toolpathError('Production toolpath compiler inputs are incomplete.');
@@ -215,6 +220,7 @@ export const compileProductionToolpath = async ({
   const chunks = [];
   const layers = [];
   const bounds = emptyBounds();
+  const thumbnailBounds = finalizeEvidence ? emptyBounds() : null;
   const speedRange = createRange();
   const flowRange = createRange();
   const layerTimeRange = createRange();
@@ -306,6 +312,10 @@ export const compileProductionToolpath = async ({
     includePoint(currentLayer.boundsMm, record.end);
     includePoint(bounds, record.start);
     includePoint(bounds, record.end);
+    if (thumbnailBounds && includeThumbnailMove(record.moveKind, record.featureKind)) {
+      includePoint(thumbnailBounds, record.start);
+      includePoint(thumbnailBounds, record.end);
+    }
     if (record.moveKind === 1) {
       includeRange(speedRange, record.speedMmPerS);
       includeRange(flowRange, record.volumetricFlowMm3PerS);
@@ -511,6 +521,15 @@ export const compileProductionToolpath = async ({
 
   if (!recordCount || !layers.length || Number(summary?.layerCount) !== layers.length) {
     throw toolpathError('Production toolpath layers do not reconcile with the G-code summary.');
+  }
+  if (finalizeEvidence) {
+    sliceEvidenceChecksumSha256 = await finalizeEvidence({
+      recordPath,
+      bounds: frozenBounds(thumbnailBounds),
+      stride: PRODUCTION_TOOLPATH_RECORD_BYTES,
+      includeMove: includeThumbnailMove
+    });
+    if (!/^[0-9a-f]{64}$/.test(sliceEvidenceChecksumSha256)) throw toolpathError('Finalized slice evidence is invalid.');
   }
   const header = Object.freeze({
     schema: PRODUCTION_TOOLPATH_SCHEMA,
