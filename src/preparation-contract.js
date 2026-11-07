@@ -13,8 +13,9 @@ export const FDM_MODIFIER_BASE_SETTING_KEYS = Object.freeze([
   'perimeters', 'fill_density', 'fill_pattern', 'top_solid_layers', 'bottom_solid_layers',
   'perimeter_speed', 'external_perimeter_speed', 'infill_speed', 'solid_infill_speed', 'top_solid_infill_speed'
 ]);
+export const BAMBU_MODIFIER_SHELL_THICKNESS_KEY = 'ensure_vertical_shell_thickness';
 export const FDM_MODIFIER_SETTING_KEYS = Object.freeze([
-  ...FDM_MODIFIER_BASE_SETTING_KEYS,
+  ...FDM_MODIFIER_BASE_SETTING_KEYS, BAMBU_MODIFIER_SHELL_THICKNESS_KEY,
   'top_solid_min_thickness', 'bottom_solid_min_thickness', 'thin_walls', 'overhangs',
   'top_fill_pattern', 'bottom_fill_pattern', 'fill_angle', 'bridge_angle', 'bridge_speed', 'gap_fill_speed',
   'ironing', 'ironing_type', 'ironing_flowrate', 'ironing_spacing', 'ironing_speed',

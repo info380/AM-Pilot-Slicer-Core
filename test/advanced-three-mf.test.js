@@ -56,6 +56,13 @@ test('native projects preserve modifier types, settings, configured pause and de
  assert.throws(()=>buildAdvancedPlate3mf({...argumentsFor(false),pauseGcode:''}),/pause command/);
  assert.throws(()=>buildAdvancedPlate3mf({...argumentsFor(false),maximumUncompressedBytes:100}),/budget|limits/);
 });
+test('Bambu modifier shell thickness is serialized on the volume and validated', () => {
+ const region = {...modifier, printOverrides:{ensure_vertical_shell_thickness:'disabled'}};
+ const config = textEntries(buildAdvancedPlate3mf(argumentsFor(true,[region])))['Metadata/model_settings.config'];
+ assert.match(config, /<part [^>]*subtype="modifier_part"[^>]*>(?:(?!<\/part>).)*<metadata key="ensure_vertical_shell_thickness" value="disabled"\/>/s);
+ assert.throws(() => buildAdvancedPlate3mf(argumentsFor(false,[region])), /requires the native Bambu engine/);
+ assert.throws(() => buildAdvancedPlate3mf(argumentsFor(true,[{...region,printOverrides:{ensure_vertical_shell_thickness:'off'}}])), /Invalid object print setting/);
+});
 test('a missing, duplicate, misplaced or above-model pause fails output verification',()=>{
  const pausePoints=[{id:'p',zMm:5.21,message:''}],gcode=';Z:5.2\n;Z:5.4\n;PAUSE_PRINT\nPAUSE\n';
  assert.doesNotThrow(()=>verifyNativePauseEvents({gcode,pausePoints,bambu:false}));

@@ -2,7 +2,7 @@ import {layerGcodeBlock} from './layer-gcode.js';
 import {zipSync,strToU8} from 'fflate';
 import {readNormalized3mfXml,CONTENT_TYPES,RELATIONSHIPS} from './three-mf.js';
 import {IDENTITY_3MF_TRANSFORM,parse3mfTransform,multiply3mfTransforms,apply3mfTransform,buildPlateObjectTransform,format3mfTransform} from './transform.js';
-import {normalizeFdmModifiers,normalizeFdmPausePoints,normalizeFdmCustomGcodePoints,FDM_PREPARATION_LIMITS} from './preparation-contract.js';
+import {BAMBU_MODIFIER_SHELL_THICKNESS_KEY,normalizeFdmModifiers,normalizeFdmPausePoints,normalizeFdmCustomGcodePoints,FDM_PREPARATION_LIMITS} from './preparation-contract.js';
 import {modifierGeometry} from './modifier-geometry.js';
 import {compileObjectOverrides} from './object-overrides.js';
 import {WorkerError} from './errors.js';
@@ -16,7 +16,7 @@ const transformedVertex = (point, matrix) => {
  return result;
 };
 const entry=value=>[strToU8(value),{mtime:new Date('1980-01-01T00:00:00.000Z')}];
-const nativeKeys=Object.freeze({"perimeters":"wall_loops","fill_density":"sparse_infill_density","fill_pattern":"sparse_infill_pattern","top_solid_layers":"top_shell_layers","bottom_solid_layers":"bottom_shell_layers","perimeter_speed":"inner_wall_speed","external_perimeter_speed":"outer_wall_speed","infill_speed":"sparse_infill_speed","solid_infill_speed":"internal_solid_infill_speed","top_solid_infill_speed":"top_surface_speed","top_solid_min_thickness":"top_shell_thickness","bottom_solid_min_thickness":"bottom_shell_thickness","thin_walls":"detect_thin_wall","overhangs":"detect_overhang_wall","top_fill_pattern":"top_surface_pattern","bottom_fill_pattern":"bottom_surface_pattern","fill_angle":"infill_direction","bridge_angle":"bridge_angle","bridge_speed":"bridge_speed","gap_fill_speed":"gap_infill_speed","ironing_type":"ironing_type","ironing_flowrate":"ironing_flow","ironing_spacing":"ironing_spacing","ironing_speed":"ironing_speed","fuzzy_skin":"fuzzy_skin","fuzzy_skin_thickness":"fuzzy_skin_thickness","fuzzy_skin_point_dist":"fuzzy_skin_point_distance","perimeter_extrusion_width":"inner_wall_line_width","external_perimeter_extrusion_width":"outer_wall_line_width","infill_extrusion_width":"sparse_infill_line_width","solid_infill_extrusion_width":"internal_solid_infill_line_width","top_infill_extrusion_width":"top_surface_line_width","infill_overlap":"infill_wall_overlap","bridge_flow_ratio":"bridge_flow"});
+const nativeKeys=Object.freeze({[BAMBU_MODIFIER_SHELL_THICKNESS_KEY]:BAMBU_MODIFIER_SHELL_THICKNESS_KEY,"perimeters":"wall_loops","fill_density":"sparse_infill_density","fill_pattern":"sparse_infill_pattern","top_solid_layers":"top_shell_layers","bottom_solid_layers":"bottom_shell_layers","perimeter_speed":"inner_wall_speed","external_perimeter_speed":"outer_wall_speed","infill_speed":"sparse_infill_speed","solid_infill_speed":"internal_solid_infill_speed","top_solid_infill_speed":"top_surface_speed","top_solid_min_thickness":"top_shell_thickness","bottom_solid_min_thickness":"bottom_shell_thickness","thin_walls":"detect_thin_wall","overhangs":"detect_overhang_wall","top_fill_pattern":"top_surface_pattern","bottom_fill_pattern":"bottom_surface_pattern","fill_angle":"infill_direction","bridge_angle":"bridge_angle","bridge_speed":"bridge_speed","gap_fill_speed":"gap_infill_speed","ironing_type":"ironing_type","ironing_flowrate":"ironing_flow","ironing_spacing":"ironing_spacing","ironing_speed":"ironing_speed","fuzzy_skin":"fuzzy_skin","fuzzy_skin_thickness":"fuzzy_skin_thickness","fuzzy_skin_point_dist":"fuzzy_skin_point_distance","perimeter_extrusion_width":"inner_wall_line_width","external_perimeter_extrusion_width":"outer_wall_line_width","infill_extrusion_width":"sparse_infill_line_width","solid_infill_extrusion_width":"internal_solid_infill_line_width","top_infill_extrusion_width":"top_surface_line_width","infill_overlap":"infill_wall_overlap","bridge_flow_ratio":"bridge_flow"});
 const patternMap=Object.freeze({monotonic:'monotonic',monotoniclines:'monotonicline',rectilinear:'zig-zag',stars:'tri-hexagon',alignedrectilinear:'alignedrectilinear',grid:'grid',triangles:'triangles',cubic:'cubic',gyroid:'gyroid',honeycomb:'honeycomb','3dhoneycomb':'3dhoneycomb',adaptivecubic:'adaptivecubic',supportcubic:'supportcubic',concentric:'concentric',hilbertcurve:'hilbertcurve',archimedeanchords:'archimedeanchords',octagramspiral:'octagramspiral',lightning:'lightning',line:'line'});
 const settingsMetadata=(overrides,bambu,type='volume')=>Object.entries(compileObjectOverrides(overrides)).map(([key,value])=>{
  if(bambu&&key==='ironing'){return value?'':`<metadata key="ironing_type" value="no ironing"/>`;}
@@ -72,6 +72,9 @@ export const buildAdvancedPlate3mf=({sources,pausePoints=[],customGcodePoints=[]
  const linked = new Map();
  for(const {source,object,objectTransform} of sources){
   const modifiers=normalizeFdmModifiers(object.modifiers||[]);
+  if (!bambu && modifiers.some(modifier => Object.hasOwn(modifier.printOverrides, BAMBU_MODIFIER_SHELL_THICKNESS_KEY))) {
+    error('Modifier shell thickness requires the native Bambu engine.');
+  }
   // Only explicit linked instances may share a native model. Verify all frozen
   // source and region evidence too; a definition ID alone is not authority.
   const variant = JSON.stringify({modifiers,overrides:object.printOverrides||{},paint:object.supportPaint||null});
