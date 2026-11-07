@@ -26,6 +26,7 @@ import { materializePlateInputs } from './plate.js';
 import { createNormalizationCache, NORMALIZATION_CACHE_SCOPE_VERSION } from './normalization-cache.js';
 import { SUPPORT_PAINT_CAPABILITY } from './support-paint.js';
 import { compileProductionToolpath } from './toolpath.js';
+import { finalizeBambuArchiveThumbnail } from './bambu-plate-thumbnail.js';
 
 const LEASE_TERMINAL_CODES = new Set([
   'slicer_worker_lease_conflict',
@@ -326,7 +327,7 @@ export const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal, n
       onProgress: sendProgress,
       profile: engineProfile
     });
-    const result = Object.freeze({
+    let result = Object.freeze({
       ...rawResult,
       metrics: config.engineKey === BAMBU_ENGINE_KEY ? rawResult.metrics : enrichResultMetrics(rawResult.metrics, effectiveConfiguration)
     });
@@ -346,14 +347,27 @@ export const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal, n
       progressPercent: 90,
       message: 'Compiling the immutable AM Pilot production toolpath.'
     });
-    const sliceEvidenceChecksumSha256 = buildSliceEvidenceChecksum({ run, result });
+    const nativeArchiveEvidence = result.archiveArtifact ? async inputs => {
+      const archiveArtifact = await finalizeBambuArchiveThumbnail({
+        ...inputs,
+        archivePath: result.archivePath,
+        archiveArtifact: result.archiveArtifact,
+        filamentColor: effectiveConfiguration.bambuConfig.filament.filament_colour[0],
+        maximumArchiveBytes: config.maximumArchiveBytes,
+        maximumExpandedBytes: config.maximumExpandedArchiveBytes,
+        signal: jobSignal
+      });
+      result = Object.freeze({ ...result, archiveArtifact });
+      return buildSliceEvidenceChecksum({ run, result });
+    } : null;
     const toolpathPreview = await compileProductionToolpath({
       gcodePath: result.gcodePath,
       workDir,
       run,
       effectiveConfiguration,
       gcodeArtifact: result.artifact,
-      sliceEvidenceChecksumSha256,
+      ...(nativeArchiveEvidence ? { finalizeEvidence: nativeArchiveEvidence }
+        : { sliceEvidenceChecksumSha256: buildSliceEvidenceChecksum({ run, result }) }),
       summary: result.metrics,
       nativeStatistics: result.nativeStatistics,
       warnings: result.warnings,
@@ -364,7 +378,7 @@ export const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal, n
       engine: claim.engine,
       result,
       toolpathPreview: toolpathPreview.artifact,
-      sliceEvidenceChecksumSha256
+      sliceEvidenceChecksumSha256: toolpathPreview.header.source.sliceEvidenceChecksumSha256
     });
     const manifestPath = await writeResultManifest({
       workDir,

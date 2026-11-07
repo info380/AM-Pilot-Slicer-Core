@@ -4,7 +4,10 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { strToU8, zipSync } from 'fflate';
+import { strFromU8, strToU8, unzipSync, zipSync, unzlibSync } from 'fflate';
+import { createHash } from 'node:crypto';
+import { finalizeBambuArchiveThumbnail } from '../src/bambu-plate-thumbnail.js';
+import { buildSliceEvidenceChecksum } from '../src/manifest.js';
 import { BAMBU_ENGINE_KEY, BAMBU_STUDIO_VERSION, assertBambuEffectiveConfiguration, inspectBambuOutput, runBambuEngine, verifyBambuStudio } from '../src/bambu-engine.js';
 import { compileProductionToolpath } from '../src/toolpath.js';
 import { resolveBambuPreset } from '../src/bambu-presets.js';
@@ -42,6 +45,63 @@ test('Bambu archive binds G-code bytes to exact model, nozzle, filament and one 
   assert.throws(() => inspect(archive(), { maximumGcodeBytes: 5 }), /byte limit/);
   assert.throws(() => inspect(new Uint8Array([0, 0])), /invalid archive/);
 });
+test('Bambu device archive embeds the same sliced paths as deterministic plate PNGs', async t => {
+  const workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bambu-thumbnail-'));
+  t.after(() => fs.rm(workDir, { recursive: true, force: true }));
+  const gcodePath = path.join(workDir, 'output.gcode');
+  const archivePath = path.join(workDir, 'output.gcode.3mf');
+  const toolpath = strToU8([
+    `; BambuStudio ${BAMBU_STUDIO_VERSION}`, 'M83', '; CHANGE_LAYER', '; Z_HEIGHT: 0.2', '; LAYER_HEIGHT: 0.2',
+    '; FEATURE: Outer wall', '; LINE_WIDTH: 0.4', 'G1 X20 Y30 F3000', 'G1 X35 Y30 E0.5',
+    'G1 X35 Y45 E0.5', 'G1 X20 Y45 E0.5', 'G1 X20 Y30 E0.5', 'G1 X300 Y300 F6000'
+  ].join('\n'));
+  const metadata = '<config><plate><metadata key="gcode_file" value="Metadata/plate_1.gcode"/></plate></config>';
+  const original = archive(undefined, {
+    'Metadata/plate_1.gcode': toolpath,
+    'Metadata/model_settings.config': strToU8(metadata),
+    'Metadata/slice_info.config': strToU8('<config/>')
+  });
+  await fs.writeFile(gcodePath, toolpath);
+  await fs.writeFile(archivePath, original);
+  const run = { id: 'thumbnail-fixture', engineKey: BAMBU_ENGINE_KEY };
+  const result = {
+    artifact: { checksumSha256: createHash('sha256').update(toolpath).digest('hex') },
+    archiveArtifact: inspect(original).archiveArtifact, metrics: { layerCount: 1 }, warnings: []
+  };
+  const preview = await compileProductionToolpath({ gcodePath, workDir, run, gcodeArtifact: result.artifact,
+    effectiveConfiguration: { ...configuration(), coordinateMapping: { projectOrigin: 'center', translationMm: { x: 128, y: 128, z: 0 } } },
+    maximumBytes: 1024 * 1024, summary: result.metrics,
+    finalizeEvidence: async inputs => {
+      result.archiveArtifact = await finalizeBambuArchiveThumbnail({
+        ...inputs, archivePath, archiveArtifact: result.archiveArtifact, filamentColor: filament.filament_colour[0],
+        maximumArchiveBytes: limits.maximumArchiveBytes, maximumExpandedBytes: limits.maximumExpandedBytes
+      });
+      return buildSliceEvidenceChecksum({ run, result });
+    }
+  });
+  const bytes = await fs.readFile(archivePath);
+  const entries = unzipSync(bytes);
+  const before = unzipSync(original);
+  for (const name of Object.keys(before).filter(name => name !== 'Metadata/model_settings.config')) assert.deepEqual(entries[name], before[name], name);
+  assert.match(strFromU8(entries['Metadata/model_settings.config']), /key="thumbnail_file" value="Metadata\/plate_1\.png"/);
+  for (const [name, width] of [['Metadata/plate_1.png', 512], ['Metadata/plate_1_small.png', 128]]) {
+    const png = Buffer.from(entries[name]);
+    assert.equal(png.readUInt32BE(16), width);
+    assert.equal(png.readUInt32BE(20), width);
+    const raster = unzlibSync(png.subarray(41, 41 + png.readUInt32BE(33)));
+    const stride = 1 + width * 4;
+    assert.equal(raster.length, stride * width);
+    const alpha = [];
+    for (let y = 0; y < width; y++) for (let x = 0; x < width; x++) {
+      if (raster[y * stride + x * 4 + 4]) alpha.push(x);
+    }
+    assert.ok(alpha.length > width, 'the plate image contains model extrusion');
+    assert.ok(Math.max(...alpha) - Math.min(...alpha) > width / 2, 'travel does not shrink the model to a corner');
+  }
+  assert.deepEqual(inspect(bytes).archiveArtifact, result.archiveArtifact);
+  assert.equal(preview.header.source.sliceEvidenceChecksumSha256, buildSliceEvidenceChecksum({ run, result }));
+});
+
 test('offline preset resolver rejects traversal and inheritance cycles', async t => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'bambu-preset-')); t.after(() => fs.rm(root, { recursive: true, force: true }));
   await fs.mkdir(path.join(root, 'machine'));
@@ -100,11 +160,29 @@ test(`real Bambu engine preserves ${model} ${nozzle} mm archive and preview plac
   const inspected = inspectBambuOutput({ bytes: new Uint8Array(await fs.readFile(result.archivePath)), machine: presets.machine, filament: presets.filament,
     maximumArchiveBytes: config.maximumArchiveBytes, maximumExpandedBytes: config.maximumExpandedArchiveBytes, maximumGcodeBytes: config.maximumGcodeBytes });
   assert.deepEqual(Buffer.from(inspected.gcode), await fs.readFile(result.gcodePath));
-  const preview = await compileProductionToolpath({ gcodePath: result.gcodePath, workDir,
-    run: { id: 'bambu-integration', engineKey: BAMBU_ENGINE_KEY },
+  const run = { id: 'bambu-integration', engineKey: BAMBU_ENGINE_KEY };
+  let finalArchive = result.archiveArtifact;
+  const preview = await compileProductionToolpath({ gcodePath: result.gcodePath, workDir, run,
     effectiveConfiguration: { engineAdapter: BAMBU_ENGINE_KEY, bambuConfig: { version: 1, ...presets },
       coordinateMapping: { projectOrigin: 'center', translationMm: { x: 128, y: 128, z: 0 } } },
-    gcodeArtifact: result.artifact, sliceEvidenceChecksumSha256: 'a'.repeat(64), summary: result.metrics, nativeStatistics:result.nativeStatistics, maximumBytes: 16777216 });
+    gcodeArtifact: result.artifact, summary: result.metrics, nativeStatistics:result.nativeStatistics, maximumBytes: 16777216,
+    finalizeEvidence: async inputs => {
+      finalArchive = await finalizeBambuArchiveThumbnail({
+        ...inputs, archivePath: result.archivePath, archiveArtifact: result.archiveArtifact,
+        filamentColor: presets.filament.filament_colour[0], maximumArchiveBytes: config.maximumArchiveBytes,
+        maximumExpandedBytes: config.maximumExpandedArchiveBytes
+      });
+      return buildSliceEvidenceChecksum({ run, result: { ...result, archiveArtifact: finalArchive } });
+    }
+  });
+  const printable = await fs.readFile(result.archivePath);
+  const packaged = inspectBambuOutput({ bytes: printable, machine: presets.machine, filament: presets.filament,
+    maximumArchiveBytes: config.maximumArchiveBytes, maximumExpandedBytes: config.maximumExpandedArchiveBytes, maximumGcodeBytes: config.maximumGcodeBytes });
+  assert.deepEqual(packaged.gcode, inspected.gcode, 'on-device preview does not alter native G-code');
+  assert.deepEqual(packaged.archiveArtifact, finalArchive);
+  const images = unzipSync(printable, { filter: entry => /^Metadata\/plate_1(?:_small)?\.png$/.test(entry.name) });
+  assert.equal(Buffer.from(images['Metadata/plate_1.png']).readUInt32BE(16), 512);
+  assert.equal(Buffer.from(images['Metadata/plate_1_small.png']).readUInt32BE(16), 128);
   assert.equal(preview.header.layerCount, result.metrics.layerCount);
   assert.ok(preview.header.statistics.featureRecordCounts.external_perimeter > 20);
   assert.ok(preview.header.statistics.featureRecordCounts.ironing > 0);
