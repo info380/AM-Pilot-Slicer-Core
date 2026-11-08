@@ -67,7 +67,7 @@ const paintAttributes=(attributes,painted)=>attributes
  .replace(/\s*slic3rpe:custom_supports="([^"]*)"/g,(_match,data)=>painted?` paint_supports="${data}"`:'');
 const meshXml=({vertices,triangles},bambu=false,painted=false)=>`<mesh><vertices>${vertices.map(p=>`<vertex x="${p.x}" y="${p.y}" z="${p.z}"/>`).join('')}</vertices><triangles>${triangles.map(t=>{const ids=t.indices||t;return `<triangle v1="${ids[0]}" v2="${ids[1]}" v3="${ids[2]}"${bambu?paintAttributes(t.attributes||'',painted):t.attributes||''}/>`;}).join('')}</triangles></mesh>`;
 
-export const buildAdvancedPlate3mf=({sources,pausePoints=[],customGcodePoints=[],bambu=false,pauseGcode,maximumUncompressedBytes,maximumSourceUncompressedBytes})=>{
+export const buildAdvancedPlate3mf=({sources,pausePoints=[],customGcodePoints=[],bambu=false,pauseGcode,maximumUncompressedBytes,maximumSourceUncompressedBytes,onBambuMesh})=>{
  if(!Array.isArray(sources)||!sources.length||!Number.isSafeInteger(maximumUncompressedBytes)||maximumUncompressedBytes<=0||!Number.isSafeInteger(maximumSourceUncompressedBytes)||maximumSourceUncompressedBytes<=0)error('Explicit preparation sources and limits are required.');
  const pauses=normalizeFdmPausePoints(pausePoints),custom=normalizeFdmCustomGcodePoints(customGcodePoints);
  if(pauses.length&&(typeof pauseGcode!=='string'||!pauseGcode.trim()))error('The selected printer has no configured pause command.');
@@ -103,6 +103,7 @@ export const buildAdvancedPlate3mf=({sources,pausePoints=[],customGcodePoints=[]
    // Keep a native object record per placement. The pinned CLI splits some
    // repeated build instances before applying region metadata, so sharing the
    // meshes (not the object metadata) preserves modifier and paint semantics.
+   onBambuMesh?.(base, objectTransform);
    const reuse=previous?.source===source && previous.variant===variant;
    const parts=reuse?previous.parts:volumes.map(volume=>({id:nextId++,volume}));
    if(!reuse)for(const part of parts)resources.push(`<object id="${part.id}" type="model">${meshXml(part.volume.geometry,true,Boolean(object.supportPaint?.data))}</object>`);
