@@ -27,6 +27,7 @@ import { createNormalizationCache, NORMALIZATION_CACHE_SCOPE_VERSION } from './n
 import { SUPPORT_PAINT_CAPABILITY } from './support-paint.js';
 import { compileProductionToolpath } from './toolpath.js';
 import { finalizeBambuArchiveThumbnail } from './bambu-plate-thumbnail.js';
+import { createBambuThumbnailScene } from './bambu-thumbnail-renderer.js';
 
 const LEASE_TERMINAL_CODES = new Set([
   'slicer_worker_lease_conflict',
@@ -297,6 +298,7 @@ export const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal, n
     }
     finishStage('download');
     const cacheBefore = normalizationCache?.enabled ? normalizationCache.stats() : null;
+    const thumbnailScene = config.engineKey === BAMBU_ENGINE_KEY ? createBambuThumbnailScene() : null;
     const plateInputPaths = await materializePlateInputs({
       inputSnapshot,
       effectiveConfiguration,
@@ -306,7 +308,11 @@ export const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal, n
       normalizationCache,
       sourceCacheScope: claim.sourceCacheScope,
       signal: jobSignal,
-      onProgress: sendProgress
+      onProgress: sendProgress,
+      onBambuMesh: thumbnailScene?.addInstance
+    });
+    const plateImages = thumbnailScene && await thumbnailScene.render({
+      filamentColor: effectiveConfiguration.bambuConfig.filament.filament_colour?.[0], signal: jobSignal
     });
     finishStage('preparation');
     if (cacheBefore) {
@@ -347,27 +353,24 @@ export const runClaim = async ({ claim: rawClaim, api, config, shutdownSignal, n
       progressPercent: 90,
       message: 'Compiling the immutable AM Pilot production toolpath.'
     });
-    const nativeArchiveEvidence = result.archiveArtifact ? async inputs => {
+    if (result.archiveArtifact) {
       const archiveArtifact = await finalizeBambuArchiveThumbnail({
-        ...inputs,
+        images: plateImages,
         archivePath: result.archivePath,
         archiveArtifact: result.archiveArtifact,
-        filamentColor: effectiveConfiguration.bambuConfig.filament.filament_colour[0],
         maximumArchiveBytes: config.maximumArchiveBytes,
         maximumExpandedBytes: config.maximumExpandedArchiveBytes,
         signal: jobSignal
       });
       result = Object.freeze({ ...result, archiveArtifact });
-      return buildSliceEvidenceChecksum({ run, result });
-    } : null;
+    }
     const toolpathPreview = await compileProductionToolpath({
       gcodePath: result.gcodePath,
       workDir,
       run,
       effectiveConfiguration,
       gcodeArtifact: result.artifact,
-      ...(nativeArchiveEvidence ? { finalizeEvidence: nativeArchiveEvidence }
-        : { sliceEvidenceChecksumSha256: buildSliceEvidenceChecksum({ run, result }) }),
+      sliceEvidenceChecksumSha256: buildSliceEvidenceChecksum({ run, result }),
       summary: result.metrics,
       nativeStatistics: result.nativeStatistics,
       warnings: result.warnings,

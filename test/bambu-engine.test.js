@@ -6,6 +6,9 @@ import path from 'node:path';
 import test from 'node:test';
 import { strFromU8, strToU8, unzipSync, zipSync, unzlibSync } from 'fflate';
 import { createHash } from 'node:crypto';
+import { createBambuThumbnailScene } from '../src/bambu-thumbnail-renderer.js';
+import { buildAdvancedPlate3mf } from '../src/advanced-three-mf.js';
+import { IDENTITY_3MF_TRANSFORM } from '../src/transform.js';
 import { finalizeBambuArchiveThumbnail } from '../src/bambu-plate-thumbnail.js';
 import { buildSliceEvidenceChecksum } from '../src/manifest.js';
 import { BAMBU_ENGINE_KEY, BAMBU_STUDIO_VERSION, assertBambuEffectiveConfiguration, inspectBambuOutput, runBambuEngine, verifyBambuStudio } from '../src/bambu-engine.js';
@@ -45,7 +48,26 @@ test('Bambu archive binds G-code bytes to exact model, nozzle, filament and one 
   assert.throws(() => inspect(archive(), { maximumGcodeBytes: 5 }), /byte limit/);
   assert.throws(() => inspect(new Uint8Array([0, 0])), /invalid archive/);
 });
-test('Bambu device archive embeds the same sliced paths as deterministic plate PNGs', async t => {
+const coverVertices = [[50,60,0],[60,60,0],[50,70,0],[60,70,0],[50,60,5],[60,60,5],[50,70,5],[60,70,5]];
+const coverTriangles = [[0,2,1],[1,2,3],[4,5,6],[5,7,6],[0,1,4],[1,5,4],[2,6,3],[3,6,7],[0,4,2],[2,4,6],[1,3,5],[3,7,5]];
+const coverSource = zipSync({'3D/3dmodel.model':strToU8(
+  '<model unit="millimeter" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"><resources><object id="1" type="model"><mesh><vertices>'
+  + coverVertices.map(([x,y,z]) => `<vertex x="${x}" y="${y}" z="${z}"/>`).join('')
+  + '</vertices><triangles>' + coverTriangles.map(([v1,v2,v3]) => `<triangle v1="${v1}" v2="${v2}" v3="${v3}"/>`).join('')
+  + '</triangles></mesh></object></resources><build><item objectid="1"/></build></model>'
+)});
+const prepareCover = ({modifiers=[], offset=0, instances=1}={}) => {
+  const scene = createBambuThumbnailScene();
+  const sources = Array.from({length:instances}, (_, index) => ({
+    source:coverSource, object:{name:'Thumbnail fixture',definitionId:'linked',modifiers},
+    objectTransform:[...IDENTITY_3MF_TRANSFORM.slice(0,9),index*offset,0,0]
+  }));
+  const prepared = buildAdvancedPlate3mf({sources,bambu:true,maximumUncompressedBytes:1048576,
+    maximumSourceUncompressedBytes:1048576,onBambuMesh:scene.addInstance});
+  return {prepared,scene};
+};
+
+test('Bambu device archive embeds shaded model covers without changing print bytes', async t => {
   const workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'bambu-thumbnail-'));
   t.after(() => fs.rm(workDir, { recursive: true, force: true }));
   const gcodePath = path.join(workDir, 'output.gcode');
@@ -68,16 +90,21 @@ test('Bambu device archive embeds the same sliced paths as deterministic plate P
     artifact: { checksumSha256: createHash('sha256').update(toolpath).digest('hex') },
     archiveArtifact: inspect(original).archiveArtifact, metrics: { layerCount: 1 }, warnings: []
   };
-  const preview = await compileProductionToolpath({ gcodePath, workDir, run, gcodeArtifact: result.artifact,
-    effectiveConfiguration: { ...configuration(), coordinateMapping: { projectOrigin: 'center', translationMm: { x: 128, y: 128, z: 0 } } },
-    maximumBytes: 1024 * 1024, summary: result.metrics,
-    finalizeEvidence: async inputs => {
-      result.archiveArtifact = await finalizeBambuArchiveThumbnail({
-        ...inputs, archivePath, archiveArtifact: result.archiveArtifact, filamentColor: filament.filament_colour[0],
-        maximumArchiveBytes: limits.maximumArchiveBytes, maximumExpandedBytes: limits.maximumExpandedBytes
-      });
-      return buildSliceEvidenceChecksum({ run, result });
-    }
+  const {scene} = prepareCover();
+  const images = await scene.render({filamentColor:filament.filament_colour[0]});
+  const region = {id:'region',name:'Large unprinted volume',shape:'box',sizeMm:{x:100,y:100,z:100},
+    transform:{positionMm:{x:50,y:60,z:5},rotationDeg:{x:0,y:0,z:0},scale:{x:1,y:1,z:1}},printOverrides:{fill_density:40}};
+  assert.deepEqual(await prepareCover({modifiers:[region]}).scene.render({filamentColor:filament.filament_colour[0]}),images,
+    'modifier volumes are excluded and identical geometry produces identical images');
+  const linked = await prepareCover({offset:25,instances:2}).scene.render({filamentColor:filament.filament_colour[0]});
+  assert.notDeepEqual(linked,images,'the translated linked copy is included in the cover');
+  result.archiveArtifact = await finalizeBambuArchiveThumbnail({
+    images,archivePath,archiveArtifact:result.archiveArtifact,
+    maximumArchiveBytes:limits.maximumArchiveBytes,maximumExpandedBytes:limits.maximumExpandedBytes
+  });
+  const preview = await compileProductionToolpath({gcodePath,workDir,run,gcodeArtifact:result.artifact,
+    effectiveConfiguration:{...configuration(),coordinateMapping:{projectOrigin:'center',translationMm:{x:128,y:128,z:0}}},
+    maximumBytes:1024*1024,summary:result.metrics,sliceEvidenceChecksumSha256:buildSliceEvidenceChecksum({run,result})
   });
   const bytes = await fs.readFile(archivePath);
   const entries = unzipSync(bytes);
@@ -91,12 +118,19 @@ test('Bambu device archive embeds the same sliced paths as deterministic plate P
     const raster = unzlibSync(png.subarray(41, 41 + png.readUInt32BE(33)));
     const stride = 1 + width * 4;
     assert.equal(raster.length, stride * width);
-    const alpha = [];
+    let covered = 0, left = width, right = 0;
+    const shades = new Set();
     for (let y = 0; y < width; y++) for (let x = 0; x < width; x++) {
-      if (raster[y * stride + x * 4 + 4]) alpha.push(x);
+      const pixel = y * stride + x * 4 + 1;
+      if (!raster[pixel+3]) continue;
+      covered++;
+      left = Math.min(left,x);
+      right = Math.max(right,x);
+      shades.add(raster[pixel]);
     }
-    assert.ok(alpha.length > width, 'the plate image contains model extrusion');
-    assert.ok(Math.max(...alpha) - Math.min(...alpha) > width / 2, 'travel does not shrink the model to a corner');
+    assert.ok(covered > width, 'the image contains visible model surfaces');
+    assert.ok(shades.size > 2, 'the model has surface shading at this size');
+    assert.ok(right - left > width / 2, 'travel does not shrink the model to a corner');
   }
   assert.deepEqual(inspect(bytes).archiveArtifact, result.archiveArtifact);
   assert.equal(preview.header.source.sliceEvidenceChecksumSha256, buildSliceEvidenceChecksum({ run, result }));
@@ -130,15 +164,9 @@ test(`real Bambu engine preserves ${model} ${nozzle} mm archive and preview plac
   presets.process.ironing_type = 'top';
   presets.process.ironing_flow = '15%';
   presets.process.ironing_speed = '25';
-  const vertices = [[50,60,0],[60,60,0],[50,70,0],[60,70,0],[50,60,5],[60,60,5],[50,70,5],[60,70,5]];
-  const triangles = [[0,2,1],[1,2,3],[4,5,6],[5,7,6],[0,1,4],[1,5,4],[2,6,3],[3,6,7],[0,4,2],[2,4,6],[1,3,5],[3,7,5]];
-  const xml = '<?xml version="1.0"?><model unit="millimeter" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02"><resources><object id="1" type="model"><mesh><vertices>'
-    + vertices.map(v => `<vertex x="${v[0]}" y="${v[1]}" z="${v[2]}"/>`).join('') + '</vertices><triangles>'
-    + triangles.map(v => `<triangle v1="${v[0]}" v2="${v[1]}" v3="${v[2]}"/>`).join('') + '</triangles></mesh></object></resources><build><item objectid="1"/></build></model>';
+  const {prepared,scene} = prepareCover();
   const platePath = path.join(workDir, 'plate.3mf');
-  await fs.writeFile(platePath, zipSync({ '3D/3dmodel.model': strToU8(xml),
-    '[Content_Types].xml': strToU8('<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/></Types>'),
-    '_rels/.rels': strToU8('<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Target="/3D/3dmodel.model" Id="rel-1" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>') }));
+  await fs.writeFile(platePath, prepared);
   const config = { bambuStudioCommand: command, workRoot: workDir, requestTimeoutMs: 30000, jobTimeoutMs: 120000,
     maximumLogBytes: 262144, maximumPlateInputBytes:16777216, engineThreads:1, engineCpuAffinity:process.env.SLICER_TEST_CPU_AFFINITY||'none', maximumArchiveBytes: 8388608, maximumExpandedArchiveBytes: 16777216, maximumGcodeBytes: 8388608 };
   await verifyBambuStudio(config);
@@ -161,19 +189,15 @@ test(`real Bambu engine preserves ${model} ${nozzle} mm archive and preview plac
     maximumArchiveBytes: config.maximumArchiveBytes, maximumExpandedBytes: config.maximumExpandedArchiveBytes, maximumGcodeBytes: config.maximumGcodeBytes });
   assert.deepEqual(Buffer.from(inspected.gcode), await fs.readFile(result.gcodePath));
   const run = { id: 'bambu-integration', engineKey: BAMBU_ENGINE_KEY };
-  let finalArchive = result.archiveArtifact;
+  const finalArchive = await finalizeBambuArchiveThumbnail({
+    images:await scene.render({filamentColor:presets.filament.filament_colour[0]}),archivePath:result.archivePath,
+    archiveArtifact:result.archiveArtifact,maximumArchiveBytes:config.maximumArchiveBytes,maximumExpandedBytes:config.maximumExpandedArchiveBytes
+  });
   const preview = await compileProductionToolpath({ gcodePath: result.gcodePath, workDir, run,
     effectiveConfiguration: { engineAdapter: BAMBU_ENGINE_KEY, bambuConfig: { version: 1, ...presets },
       coordinateMapping: { projectOrigin: 'center', translationMm: { x: 128, y: 128, z: 0 } } },
     gcodeArtifact: result.artifact, summary: result.metrics, nativeStatistics:result.nativeStatistics, maximumBytes: 16777216,
-    finalizeEvidence: async inputs => {
-      finalArchive = await finalizeBambuArchiveThumbnail({
-        ...inputs, archivePath: result.archivePath, archiveArtifact: result.archiveArtifact,
-        filamentColor: presets.filament.filament_colour[0], maximumArchiveBytes: config.maximumArchiveBytes,
-        maximumExpandedBytes: config.maximumExpandedArchiveBytes
-      });
-      return buildSliceEvidenceChecksum({ run, result: { ...result, archiveArtifact: finalArchive } });
-    }
+    sliceEvidenceChecksumSha256:buildSliceEvidenceChecksum({run,result:{...result,archiveArtifact:finalArchive}})
   });
   const printable = await fs.readFile(result.archivePath);
   const packaged = inspectBambuOutput({ bytes: printable, machine: presets.machine, filament: presets.filament,
