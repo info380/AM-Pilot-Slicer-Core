@@ -45,8 +45,26 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Configure Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
-      - name: Install Cosign
-        uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
+      - name: Install verified Cosign v2.5.3
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          signer_dir="$(mktemp -d "$RUNNER_TEMP/cosign.XXXXXX")"
+          cd "$signer_dir"
+          # The official release API serves the pinned assets without the public download URL.
+          gh api -H 'Accept: application/octet-stream' repos/sigstore/cosign/releases/assets/273874579 > cosign
+          gh api -H 'Accept: application/octet-stream' repos/sigstore/cosign/releases/assets/273875256 > cosign.sig
+          curl --fail --silent --show-error --proto '=https' --tlsv1.2 \
+            'https://raw.githubusercontent.com/sigstore/cosign/v2.5.3/release/release-cosign.pub' -o cosign.pub
+          sha256sum --check --strict <<'CHECKSUMS'
+          783b5d6c74105401c63946c68d9b2a4e1aab3c8abce043e06b8510b02b623ec9  cosign
+          f4cea466e5e887a45da5031757fa1d32655d83420639dc1758749b744179f126  cosign.pub
+          CHECKSUMS
+          openssl base64 -d -A -in cosign.sig -out cosign.sig.bin
+          openssl dgst -sha256 -verify cosign.pub -signature cosign.sig.bin cosign
+          chmod 0755 cosign
+          echo "$signer_dir" >> "$GITHUB_PATH"
       - name: Retain the exact tested Prusa native component evidence
         env:
           GH_TOKEN: ${{ github.token }}
@@ -91,12 +109,12 @@ jobs:
           DIGEST: ${{ steps.build.outputs.digest }}
         run: cosign sign --yes "${IMAGE}@${DIGEST}"
       - name: Install checksum-pinned Trivy release
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           scanner_archive="${RUNNER_TEMP}/trivy_0.70.0_Linux-64bit.tar.gz"
           scanner_directory="${RUNNER_TEMP}/trivy-0.70.0"
-          curl --fail --location --proto '=https' --tlsv1.2 \
-            'https://github.com/aquasecurity/trivy/releases/download/v0.70.0/trivy_0.70.0_Linux-64bit.tar.gz' \
-            --output "$scanner_archive"
+          gh api -H 'Accept: application/octet-stream' repos/aquasecurity/trivy/releases/assets/398381981 > "$scanner_archive"
           printf '%s  %s\n' '8b4376d5d6befe5c24d503f10ff136d9e0c49f9127a4279fd110b727929a5aa9' "$scanner_archive" | sha256sum --check --strict
           install -d "$scanner_directory"
           tar --extract --gzip --file "$scanner_archive" --directory "$scanner_directory" trivy
