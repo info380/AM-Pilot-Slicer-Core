@@ -146,8 +146,8 @@ assert.match(bambuRelease,/skip-setup-trivy: true/);
 assert.match(bambuRelease,/trivy_0\.70\.0_Linux-64bit\.tar\.gz/);
 assert.match(bambuRelease,/8b4376d5d6befe5c24d503f10ff136d9e0c49f9127a4279fd110b727929a5aa9/);
 assert.match(bambuRelease,/sha256sum --check --strict/);
-assert.match(bambuRelease,/severity: CRITICAL,HIGH/);
-assert.match(bambuRelease,/exit-code: '1'/);
+assert.match(bambuRelease, /format: sarif\n\s+output: trivy-results\.sarif\n\s+ignore-unfixed: true\n\s+exit-code: '0'/);
+assert.match(bambuRelease, /run: trivy image --ignore-unfixed --severity CRITICAL,HIGH --exit-code 1 "\$IMAGE"/);
 assert.match(bambuRelease,/flavor: latest=false/);
 assert(bambuRelease.indexOf('Publish qualified rolling alias') > bambuRelease.indexOf('Publish permanent corresponding source and release evidence'));
 
