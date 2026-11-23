@@ -137,9 +137,12 @@ library closure; the runtime never selects the previous executable on failure.
 The release workflow tests the packaged image against the stock and source-built
 controls with identical installed profile resources. It retains 42 synthetic native
 executions and one-CPU/two-GB resource evidence, then publishes the complete native
-build and source archives permanently. Future materialization can use the retained
-tar with its exact plan through the explicit `from-tar` command; no automatic
-artifact-source substitution is performed when a workflow artifact expires.
+build and source archives permanently. Worker-only integration and release
+workflows use `fetch-runtime.sh --release` (after the two path arguments) to
+retrieve both archives from the immutable distribution release pinned in
+`runtime-plan.json`. GitHub release attestations and the existing archive and
+build evidence checks still apply. Use the workflow-artifact mode for a new
+native build before its archives are published in an immutable release.
 
 The signed image still needs exact-digest API engine registration and a verified
 worker rollout before it is active. Native packaging changes require a worker

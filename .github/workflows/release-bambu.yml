@@ -36,7 +36,7 @@ jobs:
       - name: Verify and materialize the measured native runtime
         env:
           GH_TOKEN: ${{ github.token }}
-        run: bash native/bambu/fetch-runtime.sh "$RUNNER_TEMP/bambu-runtime-download" native/bambu/runtime
+        run: bash native/bambu/fetch-runtime.sh "$RUNNER_TEMP/bambu-runtime-download" native/bambu/runtime --release
       - name: Authenticate to GHCR
         uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
         with:

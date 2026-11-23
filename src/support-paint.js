@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { zipSync, strToU8 } from 'fflate';
 import { WorkerError } from './errors.js';
+import { flattenSource } from './advanced-three-mf.js';
 import { readNormalized3mfXml } from './three-mf.js';
 import { IDENTITY_3MF_TRANSFORM, parse3mfTransform } from './transform.js';
 
@@ -11,8 +12,10 @@ const fail = message => { throw new WorkerError(message, { code: 'slicer_support
 // Protocol validation is deliberately repeated at the worker trust boundary.
 // Only native whole-facet states and four-midpoint subdivision are admitted.
 export const validateSupportPaint = (paint, { source, model }) => {
-  if (paint?.schema !== 'am-pilot-support-paint' || paint.version !== 1
-    || model.sourceFormat !== 'stl' || !/^[a-f0-9]{64}$/.test(paint.sourceSha256)
+  const is3mf = model.sourceFormat === '3mf';
+  if (paint?.schema !== 'am-pilot-support-paint'
+    || (is3mf ? paint.version !== 2 : model.sourceFormat !== 'stl' || paint.version !== 1)
+    || !/^[a-f0-9]{64}$/.test(paint.sourceSha256)
     || paint.sourceSha256 !== model.checksumSha256
     || createHash('sha256').update(source).digest('hex') !== paint.sourceSha256
     || !Number.isSafeInteger(paint.triangleCount) || paint.triangleCount < 1 || paint.triangleCount > limits.triangles
@@ -34,6 +37,13 @@ export const validateSupportPaint = (paint, { source, model }) => {
     if (offset !== -1) fail('Trailing support paint data.');
     facets.set(last, match[2]);
   }
+  if (is3mf && (!Array.isArray(paint.facetCoordinates) || paint.facetCoordinates.length !== facets.size
+    || paint.facetCoordinates.some(facet => !Array.isArray(facet) || facet.length !== 9
+      || facet.some(coordinate => !Number.isFinite(coordinate) || Math.fround(coordinate) !== coordinate))
+    || paint.data.length + JSON.stringify(paint.facetCoordinates).length > limits.bytes)) {
+    fail('3MF support paint has invalid facet evidence.');
+  }
+  if (!is3mf && Object.hasOwn(paint, 'facetCoordinates')) fail('Unexpected facet coordinates for STL paint.');
   return facets;
 };
 
@@ -67,11 +77,83 @@ export const readPaintableStl = source => {
   return positions;
 };
 
-export const buildSupportPainted3mf = ({ source, model, paint, maximumUncompressedBytes }) => {
+const vertexKeys = vertices => [0, 3, 6].map(i => vertices.slice(i, i + 3).join(','));
+const facetKey = keys => [...keys].sort().join(';');
+const centroid = coordinates => [0, 1, 2].map(axis =>
+  (coordinates[axis] + coordinates[axis + 3] + coordinates[axis + 6]) / 3);
+
+const matchPaintedFacets = ({ normalizedSource, paint, annotations, maximumUncompressedBytes }) => {
+  if (!normalizedSource) fail('3MF paint requires verified normalized source geometry.');
+  const {vertices, triangles} = flattenSource(normalizedSource, IDENTITY_3MF_TRANSFORM, maximumUncompressedBytes);
+  if (triangles.length !== paint.triangleCount) fail('3MF normalization changed the number of source facets.');
+
+  // The native normalizer recenters float32 vertices and serializes the frame
+  // translation with max_digits10. Bound the frame's forward roundoff from
+  // its coordinate range. This bound is for matching only: the emitted
+  // geometry comes from the worker's normalized archive.
+  let magnitude = 0;
+  for (const {x, y, z} of vertices) magnitude = Math.max(magnitude, Math.abs(x), Math.abs(y), Math.abs(z));
+  const float32UnitRoundoff = 2 ** -24;
+  const roundoff = 4 * float32UnitRoundoff * magnitude;
+  if (!(roundoff > 0 && Number.isFinite(roundoff))) fail('3MF paint has no valid normalized coordinate frame.');
+  const cellSize = 2 * roundoff;
+  const cell = coordinates => centroid(coordinates).map(value => Math.floor(value / cellSize));
+  const buckets = new Map(), sourceFacets = new Set();
+  for (const [i, annotation] of [...annotations.values()].entries()) {
+    const coordinates = paint.facetCoordinates[i];
+    const keys = vertexKeys(coordinates);
+    const key = facetKey(keys);
+    if (new Set(keys).size !== 3 || sourceFacets.has(key)) fail('3MF paint references an ambiguous source facet.');
+    sourceFacets.add(key);
+    const bucket = cell(coordinates).join(',');
+    if (!buckets.has(bucket)) buckets.set(bucket, []);
+    buckets.get(bucket).push({ coordinates, annotation, matched: false });
+  }
+
+  const positions = new Float32Array(triangles.length * 9);
+  const facets = new Map();
+  let comparisons = 0;
+  for (const [index, triangle] of triangles.entries()) {
+    const coordinates = triangle.indices.flatMap(i => {
+      const {x, y, z} = vertices[i];
+      return [x, y, z].map(Math.fround);
+    });
+    if (coordinates.some(coordinate => !Number.isFinite(coordinate)) || new Set(vertexKeys(coordinates)).size !== 3) {
+      fail('3MF normalization produced an invalid facet.');
+    }
+    const [x, y, z] = cell(coordinates);
+    let match;
+    for (const dx of [-1, 0, 1]) for (const dy of [-1, 0, 1]) for (const dz of [-1, 0, 1]) {
+      const candidates = buckets.get([x + dx, y + dy, z + dz].join(',')) || [];
+      for (const target of candidates) {
+        if (++comparisons > limits.nodes + limits.triangles) fail('3MF paint exceeds the facet matching budget.');
+        for (const offset of [0, 3, 6]) {
+          if (target.coordinates.some((value, axis) => Math.abs(value - coordinates[(offset + axis) % 9]) > roundoff)) continue;
+          if (match || target.matched) fail('3MF normalization produced an ambiguous match for a painted facet.');
+          match = { target, offset };
+        }
+      }
+    }
+    // Start a matched facet at the same vertex used by the viewport. Only
+    // cyclic permutations preserve winding and annotation subdivision.
+    if (match) {
+      const {target, offset} = match;
+      positions.set([...coordinates.slice(offset), ...coordinates.slice(0, offset)], index * 9);
+      target.matched = true;
+      facets.set(index, target.annotation);
+    } else positions.set(coordinates, index * 9);
+  }
+  if (facets.size !== annotations.size) fail('3MF normalization could not verify every painted facet.');
+  return {positions, facets};
+};
+
+export const buildSupportPainted3mf = ({ source, normalizedSource, model, paint, maximumUncompressedBytes }) => {
   if (!Number.isSafeInteger(maximumUncompressedBytes) || maximumUncompressedBytes <= 0) fail('A painted-model expansion limit is required.');
-  const facets = validateSupportPaint(paint, { source, model });
-  const positions = readPaintableStl(source);
-  if (positions.length / 9 !== paint.triangleCount) fail('Support paint facet count does not match the source STL.');
+  const annotations = validateSupportPaint(paint, { source, model });
+  const { positions, facets } = model.sourceFormat === '3mf'
+    ? matchPaintedFacets({ normalizedSource, paint, annotations, maximumUncompressedBytes })
+    : { positions: readPaintableStl(source), facets: annotations };
+  if (positions.length / 9 !== paint.triangleCount) fail('Support paint facet count does not match the source mesh.');
   const vertices = [], triangles = [], byPosition = new Map();
   let bytes = 2048;
   const append = (target, value) => {

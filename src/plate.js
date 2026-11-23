@@ -160,7 +160,7 @@ export const materializePlateInputs = async ({
       const annotatedPath = path.join(workDir, `paint-source-${index}.3mf`);
       const normalizedPath = path.join(workDir, `paint-normalized-${index}.3mf`);
       const annotated = buildSupportPainted3mf({
-        source: await fs.readFile(downloadedModels.get(model.modelId)), model,
+        source: await fs.readFile(downloadedModels.get(model.modelId)), normalizedSource: source, model,
         paint: object.supportPaint, maximumUncompressedBytes: config.maximumNormalizedModelBytes
       });
       await fs.writeFile(annotatedPath, annotated, { mode: 0o600 });
