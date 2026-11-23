@@ -9,7 +9,9 @@ Initial scope: A1 and A2L, one physical nozzle, single-filament external spool,
 one plate per run. Printer, process and filament settings must be fully resolved,
 compatible and bound into the immutable effective configuration. No network-based
 profile updates, desktop post-processing, profile host credentials, AMS,
-per-object overrides are admitted by the initial capability.
+per-object overrides are admitted by the initial capability. Capability r11
+adds whole-object infill density, infill pattern and wall loop overrides
+through Bambu's native object metadata.
 
 The engine is not yet registered or deployed in AM Pilot production. The platform
 must validate and retain the additional `printArchive` completion artifact before

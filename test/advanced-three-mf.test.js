@@ -21,14 +21,15 @@ const source = zipSync({'3D/3dmodel.model':strToU8(model)});
 const modifier = {id:'region-1',name:'Solid lower half',shape:'box',sizeMm:{x:22,y:22,z:5},transform:transform(0,0,2.5),printOverrides:{fill_density:100}};
 const argumentsFor = (bambu,modifiers=[modifier],pauses=[{id:'pause-1',zMm:5.2,message:'Insert part'}]) => ({bambu,pauseGcode:bambu?'M400 U1':'PAUSE',maximumUncompressedBytes:16*1024*1024,maximumSourceUncompressedBytes:16*1024*1024,pausePoints:pauses,sources:[{source,object:{name:'Test cube',modifiers},objectTransform:buildPlateObjectTransform({transform:transform(80,80),coordinateMapping:{projectOrigin:'center',engineBedOrigin:'front_left',translationMm:{x:0,y:0,z:0}}})}]});
 const textEntries = bytes => Object.fromEntries(Object.entries(unzipSync(bytes)).map(([name,bytes])=>[name,strFromU8(bytes)]));
-const infillLength = layer => {
+const infillFeatures = ['Sparse infill','Internal infill','Internal solid infill','Solid infill'];
+const infillLength = (layer, inPart = () => true, features = infillFeatures) => {
  let feature='',x=0,y=0,length=0;
  for(const line of layer.split('\n')){
   const label=line.match(/^;(?: FEATURE: |TYPE:)(.+)/);if(label)feature=label[1];
   if(!/^G[01] /.test(line))continue;
   const values=Object.fromEntries([...line.matchAll(/([XYE])([-\d.]+)/g)].map(match=>[match[1],Number(match[2])]));
   const nextX=values.X ?? x,nextY=values.Y ?? y;
-  if(['Sparse infill','Internal infill','Internal solid infill','Solid infill'].includes(feature) && values.E>0)length+=Math.hypot(nextX-x,nextY-y);
+  if(features.includes(feature) && values.E>0 && inPart(x,nextX))length+=Math.hypot(nextX-x,nextY-y);
   x=nextX;y=nextY;
  }
  return length;
@@ -75,6 +76,11 @@ test('Bambu modifier ironing inset is scoped to the volume, including explicit z
  objectInput.sources[0].object.printOverrides = {ironing_inset:2};
  assert.throws(() => buildAdvancedPlate3mf(objectInput), /Invalid object print setting/);
 });
+test('Bambu whole-part metadata rejects unqualified object settings',()=>{
+ const args=argumentsFor(true,[],[]);
+ args.sources[0].object.printOverrides={top_solid_layers:4};
+ assert.throws(()=>buildAdvancedPlate3mf(args),{code:'slicer_object_overrides_unqualified'});
+});
 test('a missing, duplicate, misplaced or above-model pause fails output verification',()=>{
  const pausePoints=[{id:'p',zMm:5.21,message:''}],gcode=';Z:5.2\n;Z:5.4\n;PAUSE_PRINT\nPAUSE\n';
  assert.doesNotThrow(()=>verifyNativePauseEvents({gcode,pausePoints,bambu:false}));
@@ -85,6 +91,40 @@ test('a missing, duplicate, misplaced or above-model pause fails output verifica
 
 const bambuCommand=process.env.BAMBU_STUDIO_INTEGRATION_CMD, resources=process.env.BAMBU_STUDIO_INTEGRATION_RESOURCES;
 const prusaCommand=process.env.PRUSA_SLICER_INTEGRATION_CMD;
+test('real Bambu whole-part infill preserves plate defaults on neighboring parts', {skip:!bambuCommand || !resources || process.env.FDM_ADVANCED_ENGINE==='prusa'}, async t=>{
+ const workDir=await fs.mkdtemp(path.join(os.tmpdir(),'bambu-whole-part-'));
+ t.after(()=>fs.rm(workDir,{recursive:true,force:true}));
+ const config={bambuStudioCommand:bambuCommand,workRoot:workDir,jobTimeoutMs:120000,requestTimeoutMs:30000,maximumLogBytes:262144,maximumArchiveBytes:16777216,maximumExpandedArchiveBytes:33554432,maximumGcodeBytes:16777216,maximumPlateInputBytes:33554432,engineThreads:1,engineCpuAffinity:process.env.SLICER_TEST_CPU_AFFINITY||'none'};
+ const machine=(await resolveBambuPreset({resourceRoot:resources,kind:'machine',name:'Bambu Lab A1 0.4 nozzle'})).settings;
+ const processPreset=(await resolveBambuPreset({resourceRoot:resources,kind:'process',name:machine.default_print_profile})).settings;
+ const filament=(await resolveBambuPreset({resourceRoot:resources,kind:'filament',name:'Generic PLA @BBL A1'})).settings;
+ machine.nozzle_volume_type=[...machine.default_nozzle_volume_type];filament.filament_colour=['#AABBCC'];
+ Object.assign(processPreset,{curr_bed_type:'Textured PEI Plate',wall_loops:'2',sparse_infill_density:'15%',sparse_infill_pattern:'grid',top_shell_layers:'0',bottom_shell_layers:'0'});
+ const effectiveConfiguration={engineAdapter:BAMBU_ENGINE_KEY,bambuConfig:{version:1,machine,process:processPreset,filament}};
+ const args=argumentsFor(true,[],[]);
+ args.sources=[50,100,150].map((x,index)=>({
+  source,
+  object:{name:`Part ${index+1}`,definitionId:index<2?'linked':'detached',printOverrides:index<2?{fill_density:100,fill_pattern:'concentric',perimeters:4}:{}},
+  objectTransform:buildPlateObjectTransform({transform:transform(x,80),coordinateMapping:{projectOrigin:'center',engineBedOrigin:'front_left',translationMm:{x:0,y:0,z:0}}})
+ }));
+ const platePath=path.join(workDir,'plate.3mf');
+ const bytes=buildAdvancedPlate3mf(args);
+ const metadata=textEntries(bytes)['Metadata/model_settings.config'];
+ assert.equal((metadata.match(/key="sparse_infill_density" value="100%"/g)||[]).length,2,'each linked part carries the same native override');
+ assert.doesNotMatch(metadata,/modifier_part/);
+ await fs.writeFile(platePath,bytes);
+ const result=await runBambuEngine({config,workDir,plateInputPaths:[platePath],effectiveConfiguration});
+ const layers=(await fs.readFile(result.gcodePath,'utf8')).split(/; CHANGE_LAYER\n/);
+ for(const height of [2,5,8]){
+  const layer=layers.find(layer=>Number(layer.match(/; Z_HEIGHT: ([\d.]+)/)?.[1])===height);
+  assert.ok(layer,`missing layer at ${height} mm`);
+  const lengths=features=>[50,100,150].map(x=>infillLength(layer,(from,to)=>Math.abs(from-x)<11&&Math.abs(to-x)<11,features));
+  const [first,second,third]=lengths();
+  assert.ok(third>0&&first>third*2&&second>third*2,`unexpected infill lengths at ${height} mm: ${first}, ${second}, ${third}`);
+  const [firstWalls,secondWalls,thirdWalls]=lengths(['Inner wall','Outer wall']);
+  assert.ok(thirdWalls>0&&firstWalls>thirdWalls*1.5&&secondWalls>thirdWalls*1.5,`unexpected wall lengths at ${height} mm: ${firstWalls}, ${secondWalls}, ${thirdWalls}`);
+ }
+});
 for(const bambu of [false,true].filter(bambu=>!process.env.FDM_ADVANCED_ENGINE || process.env.FDM_ADVANCED_ENGINE===(bambu?'bambu':'prusa')))for(const shape of ['box','cylinder','sphere'])test(`real ${bambu?'Bambu':'Prusa'} pause and local ${shape} modifier`,{skip:bambu?(!bambuCommand||!resources):!prusaCommand},async t=>{
  const workDir=await fs.mkdtemp(path.join(os.tmpdir(),`fdm-advanced-${bambu?'bambu':'prusa'}-`));
  if(process.env.KEEP_FDM_NATIVE_OUTPUT)process.stdout.write(`Native output: ${workDir}\n`);

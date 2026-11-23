@@ -132,9 +132,6 @@ export const materializePlateInputs = async ({
   }
 
   const bambu = effectiveConfiguration.engineAdapter === BAMBU_ENGINE_KEY;
-  if (bambu && objects.some(object => Object.keys(object.printOverrides || {}).length)) {
-    throw new WorkerError('This Bambu revision does not support object overrides.', { code: 'slicer_object_overrides_unqualified' });
-  }
   const advanced=hasFdmAdvancedPreparation(inputSnapshot.plate);
   if(advanced)assertFdmPlatePreparation(inputSnapshot.plate);
   const preparedSources=[];
