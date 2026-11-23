@@ -3,6 +3,7 @@
   "version": 2,
   "repository": "info380/AM-Pilot-Slicer-Core",
   "repositoryId": 1355195265,
+  "distributionRelease": "bambu-v0.3.16",
   "nativeSourceRevision": "c26d824c8326db943fc6651a726d633f075b6240",
   "nativeSourceArchiveSha256": "16052e3e0cf7353ac14c198fe27a860ca61f497b835a1b59686c65bc7bd67cd4",
   "workflowPath": ".github/workflows/cpu-thread-measurements.yml",

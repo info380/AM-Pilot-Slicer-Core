@@ -50,7 +50,7 @@ jobs:
       - name: Verify and materialize the pinned native runtime
         env:
           GH_TOKEN: ${{ github.token }}
-        run: bash native/bambu/fetch-runtime.sh "$RUNNER_TEMP/bambu-runtime-download" native/bambu/runtime
+        run: bash native/bambu/fetch-runtime.sh "$RUNNER_TEMP/bambu-runtime-download" native/bambu/runtime --release
       - name: Build the isolated native Bambu worker
         run: docker build --file Dockerfile.bambu --tag bambu-worker:test .
       - name: Test all variants without network or a writable root filesystem
