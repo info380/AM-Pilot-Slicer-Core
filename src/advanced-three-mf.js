@@ -30,7 +30,7 @@ const bambuVolumeSettingsMetadata = ({ ironing_inset: ironingInset, ...objectOve
 
 // Flatten only the already normalized geometry graph. Never import source profile,
 // script or project metadata. Instance transforms and support-paint attributes stay.
-const flattenSource=(source,parentTransform,limit)=>{
+export const flattenSource=(source,parentTransform,limit)=>{
  const text=readNormalized3mfXml({source,maximumUncompressedBytes:limit});
  if(/<!DOCTYPE|<!ENTITY|\b(?:p:)?path\s*=/i.test(text))error('External or entity geometry is unsupported.');
  const resources=text.match(/<resources\b[^>]*>([\s\S]*?)<\/resources>/)?.[1];

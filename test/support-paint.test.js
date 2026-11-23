@@ -195,6 +195,9 @@ test('real Bambu worker applies whole-facet, partial, blocker and linked support
  const workDir=await fs.mkdtemp(path.join(os.tmpdir(),'bambu-support-paint-'));
  t.after(()=>process.env.KEEP_FDM_NATIVE_OUTPUT?console.log(workDir):fs.rm(workDir,{recursive:true,force:true}));
  const sourcePath=path.join(workDir,'source.stl');await fs.writeFile(sourcePath,source);
+ const threeMfSource=buildSupportPainted3mf({source,model,paint:paint(''),maximumUncompressedBytes:1_000_000});
+ const threeMfPath=path.join(workDir,'source.3mf');await fs.writeFile(threeMfPath,threeMfSource);
+ const threeMfModel={...model,sourceFormat:'3mf',sizeBytes:threeMfSource.length,checksumSha256:createHash('sha256').update(threeMfSource).digest('hex')};
  const resourceRoot=process.env.BAMBU_STUDIO_INTEGRATION_RESOURCES;
  const machine=(await resolveBambuPreset({resourceRoot,kind:'machine',name:'Bambu Lab A1 0.4 nozzle'})).settings;
  const preset=(await resolveBambuPreset({resourceRoot,kind:'process',name:machine.default_print_profile})).settings;
@@ -205,14 +208,18 @@ test('real Bambu worker applies whole-facet, partial, blocker and linked support
   jobTimeoutMs:120000,maximumLogBytes:262144,maximumNormalizedModelBytes:67108864,maximumTotalNormalizedBytes:134217728,maximumPlateInputBytes:201326592,
   maximumArchiveBytes:16777216,maximumExpandedArchiveBytes:33554432,maximumGcodeBytes:16777216,engineThreads:1,engineCpuAffinity:process.env.SLICER_TEST_CPU_AFFINITY||'none'};
  const evidence={};
- for(const [name,data] of [['none',''],['enforce','12:4\n13:4'],['partial','12:40003'],['auto',''],['block','12:8\n13:8'],['linked','12:4\n13:4']]){
+ for(const [name,data] of [['none',''],['enforce','12:4\n13:4'],['partial','12:40003'],['auto',''],['block','12:8\n13:8'],['linked','12:4\n13:4'],['3mf-partial','12:40003'],['3mf-block','12:8\n13:8']]){
   const runDir=path.join(workDir,name);await fs.mkdir(runDir);
-  const object={id:'painted',name:'Shelf',definitionId:'linked',fileId:'file',supportPaint:paint(data),placement:{status:'placed'},printOverrides:{},transform:{positionMm:{x:0,y:0,z:0},rotationDeg:{x:0,y:0,z:0},scale:{x:1,y:1,z:1}}};
+  const use3mf = name.startsWith('3mf-');
+  const supportPaint = use3mf ? { ...paint(data), version: 2, sourceSha256: threeMfModel.checksumSha256,
+    facetCoordinates: data.split('\n').map(line => facets[Number(line.split(':')[0])].flatMap(i => vertices[i])) }
+    : paint(data);
+  const object={id:'painted',name:'Shelf',definitionId:'linked',fileId:'file',supportPaint,placement:{status:'placed'},printOverrides:{},transform:{positionMm:{x:0,y:0,z:0},rotationDeg:{x:0,y:0,z:0},scale:{x:1,y:1,z:1}}};
   const objects=name==='linked'?[object,{...object,id:'copy',transform:{...object.transform,positionMm:{x:30,y:0,z:0}}}]:[object];
-  const inputSnapshot={schema:'am-pilot-slicer-input-snapshot',version:1,models:[model],plate:{geometry:{heightMm:256},objects}};
-  const effectiveConfiguration={engineAdapter:BAMBU_ENGINE_KEY,coordinateMapping:{projectOrigin:'center',engineBedOrigin:'front_left',translationMm:{x:100,y:100,z:0}},bambuConfig:{version:1,machine,filament,process:{...preset,support_type:['auto','block'].includes(name)?'normal(auto)':'normal(manual)'}}};
+  const inputSnapshot={schema:'am-pilot-slicer-input-snapshot',version:1,models:[use3mf ? threeMfModel : model],plate:{geometry:{heightMm:256},objects}};
+  const effectiveConfiguration={engineAdapter:BAMBU_ENGINE_KEY,coordinateMapping:{projectOrigin:'center',engineBedOrigin:'front_left',translationMm:{x:100,y:100,z:0}},bambuConfig:{version:1,machine,filament,process:{...preset,support_type:['auto','block','3mf-block'].includes(name)?'normal(auto)':'normal(manual)'}}};
   const motionOverrides={machine_max_acceleration_travel:13000};machine.machine_max_acceleration_travel[0]='13000';effectiveConfiguration.ownership={machine:{motionOverrides}};
-  const paths=await materializePlateInputs({inputSnapshot,effectiveConfiguration,downloadedModels:new Map([['source',sourcePath]]),workDir:runDir,config});
+  const paths=await materializePlateInputs({inputSnapshot,effectiveConfiguration,downloadedModels:new Map([['source',use3mf ? threeMfPath : sourcePath]]),workDir:runDir,config});
   const modelXml=xml(await fs.readFile(paths[0]));
   assert.doesNotMatch(modelXml,/slic3rpe:custom_supports=/);
   if(data)assert.match(modelXml,/paint_supports=/,'native Bambu paint was retained');
@@ -236,6 +243,78 @@ test('real Bambu worker applies whole-facet, partial, blocker and linked support
  assert.ok(evidence.partial.bounds.maxY<evidence.enforce.bounds.maxY-2,'partial paint retains its source orientation');
  assert.ok(evidence.auto.extrusion>0);
  assert.equal(evidence.block.extrusion,0);
+ assert.deepEqual(evidence['3mf-partial'],evidence.partial);
+ assert.equal(evidence['3mf-block'].extrusion,0);
  assert.ok(evidence.linked.extrusion>evidence.enforce.extrusion*1.5);
  t.diagnostic(JSON.stringify(evidence));
+});
+
+
+test('3MF paint maps source vertices through facet reordering and cyclic vertex order', () => {
+  const original = buildSupportPainted3mf({ source, model, paint: paint(''), maximumUncompressedBytes: 1_000_000 });
+  const sourceSha256 = createHash('sha256').update(original).digest('hex');
+  const packageWith = change => {
+    const entries = unzipSync(original);
+    entries['3D/3dmodel.model'] = strToU8(change(xml(original)));
+    return zipSync(entries);
+  };
+  const reordered = packageWith(text => {
+    const faces = [...text.matchAll(/<triangle v1="(\d+)" v2="(\d+)" v3="(\d+)"\/>/g)];
+    return text.replace(/<triangles>[\s\S]*?<\/triangles>/, '<triangles>' + faces.reverse()
+      .map(([,a,b,c]) => `<triangle v1="${b}" v2="${c}" v3="${a}"/>`).join('') + '</triangles>');
+  });
+  const originalPosition = facets[0].flatMap(index => vertices[index]);
+  const options = { source: original, normalizedSource: reordered,
+    model: { ...model, sourceFormat: '3mf', checksumSha256: sourceSha256 },
+    paint: { ...paint('0:40003'), sourceSha256, version: 2, facetCoordinates: [originalPosition] },
+    maximumUncompressedBytes: 1_000_000 };
+  const result = buildSupportPainted3mf(options);
+  const resultXml = xml(result);
+  const points = [...resultXml.matchAll(/<vertex x="([^"]+)" y="([^"]+)" z="([^"]+)"\/>/g)]
+    .map(([, x, y, z]) => [x, y, z].map(Number));
+  const [, a, b, c] = resultXml.match(/<triangle v1="(\d+)" v2="(\d+)" v3="(\d+)" slic3rpe:custom_supports="40003"\/>/);
+  assert.deepEqual([a, b, c].flatMap(index => points[index]), originalPosition);
+  assert.equal((resultXml.match(/<triangle /g) || []).length, facets.length);
+  assert.throws(() => buildSupportPainted3mf({ ...options, normalizedSource: packageWith(text => text.replace('x="-5"', 'x="-6"')) }),
+    { code: 'slicer_support_paint_invalid' });
+  assert.throws(() => buildSupportPainted3mf({ ...options, paint: { ...options.paint, sourceSha256: 'a'.repeat(64) } }),
+    { code: 'slicer_support_paint_invalid' });
+  assert.throws(() => buildSupportPainted3mf({ ...options, paint: { ...options.paint, facetCoordinates: [] } }),
+    { code: 'slicer_support_paint_invalid' });
+  const ambiguous = packageWith(text => {
+    const triangles = [...text.matchAll(/<triangle v1="\d+" v2="\d+" v3="\d+"\/>/g)];
+    return text.replace(triangles[1][0], triangles[0][0]);
+  });
+  assert.throws(() => buildSupportPainted3mf({ ...options, normalizedSource: ambiguous }), /ambiguous match/);
+});
+
+
+test('native Prusa normalization maps fractional off-origin 3MF support coordinates',
+  {skip: !process.env.PRUSA_SLICER_INTEGRATION_CMD}, async t => {
+  const workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'fractional-3mf-paint-'));
+  t.after(() => fs.rm(workDir, {recursive: true, force: true}));
+  const shifted = Buffer.from(source);
+  for (let face = 0; face < facets.length; face++) {
+    for (let coordinate = 0; coordinate < 9; coordinate++) {
+      const offset = 84 + face * 50 + 12 + coordinate * 4;
+      shifted.writeFloatLE(shifted.readFloatLE(offset) + [0.0248918533, 0.37, 0.2698773146][coordinate % 3], offset);
+    }
+  }
+  const digest = bytes => createHash('sha256').update(bytes).digest('hex');
+  const stlChecksum = digest(shifted);
+  const archive = buildSupportPainted3mf({source: shifted, model: {...model, checksumSha256: stlChecksum},
+    paint: {...paint(''), sourceSha256: stlChecksum}, maximumUncompressedBytes: 1_000_000});
+  const sourcePath = path.join(workDir, 'source.3mf');
+  const normalizedPath = path.join(workDir, 'normalized.3mf');
+  await fs.writeFile(sourcePath, archive);
+  await runProcess({ command: process.env.PRUSA_SLICER_INTEGRATION_CMD,
+    args: ['--export-3mf', '--dont-arrange', '--no-ensure-on-bed', '--config-compatibility', 'disable', '--output', normalizedPath, sourcePath],
+    cwd: workDir, timeoutMs: 30_000, maximumLogBytes: 262_144 });
+  const paintChecksum = digest(archive);
+  const options = { source: archive, normalizedSource: await fs.readFile(normalizedPath),
+    model: {...model, sourceFormat: '3mf', checksumSha256: paintChecksum},
+    paint: {...paint('12:40003'), sourceSha256: paintChecksum, version: 2,
+      facetCoordinates: [readPaintableStl(shifted).slice(12 * 9, 13 * 9)]},
+    maximumUncompressedBytes: 1_000_000 };
+  assert.match(xml(buildSupportPainted3mf(options)), /slic3rpe:custom_supports="40003"/);
 });
